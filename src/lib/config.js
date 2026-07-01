@@ -17,6 +17,12 @@ function positive(value, fallback) {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+// Día de la semana entero 0..6; si no, usa el default.
+function weekday(value, fallback) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 6 ? n : fallback;
+}
+
 // Devuelve un config válido a partir de cualquier entrada (o null).
 export function sanitizeConfig(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
@@ -27,6 +33,7 @@ export function sanitizeConfig(raw) {
       c.maintenance_cost_per_mile,
       DEFAULT_CONFIG.maintenance_cost_per_mile
     ),
+    pay_week_start_day: weekday(c.pay_week_start_day, DEFAULT_CONFIG.pay_week_start_day),
   };
 }
 

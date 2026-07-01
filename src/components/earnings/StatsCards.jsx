@@ -47,11 +47,11 @@ function Card({ title, totals }) {
   );
 }
 
-export default function StatsCards({ semana, mes }) {
+export default function StatsCards({ semana, mes, semanaLabel = "Esta semana", mesLabel = "Este mes" }) {
   return (
     <div className="flex gap-2.5">
-      <Card title="Esta semana" totals={semana} />
-      <Card title="Este mes" totals={mes} />
+      <Card title={semanaLabel} totals={semana} />
+      <Card title={mesLabel} totals={mes} />
     </div>
   );
 }

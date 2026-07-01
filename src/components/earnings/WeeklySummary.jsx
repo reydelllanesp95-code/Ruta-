@@ -1,13 +1,9 @@
 import React from "react";
 import PeriodSummary from "./PeriodSummary.jsx";
+import { payWeekLabel } from "../../lib/earnings.js";
 
-// "2026-W26" -> "Semana 26 · 2026"
-function labelForWeek(key) {
-  const m = String(key).match(/^(\d{4})-W(\d{2})$/);
-  if (!m) return key;
-  return `Semana ${Number(m[2])} · ${m[1]}`;
-}
-
+// La clave de cada semana es la fecha de inicio (sábado). Mostramos el rango
+// "27 jun – 3 jul" (sábado→viernes, el día de cobro).
 export default function WeeklySummary({ items }) {
-  return <PeriodSummary title="Por semana" items={items} labelFor={labelForWeek} />;
+  return <PeriodSummary title="Por semana (sáb→vie)" items={items} labelFor={payWeekLabel} />;
 }

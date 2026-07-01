@@ -5,6 +5,12 @@ import {
   weekKey,
   monthKey,
   isoWeek,
+  payWeekStart,
+  payWeekEnd,
+  payWeekKey,
+  payWeekLabel,
+  currentPayWeekKey,
+  monthLabel,
   computeHuella,
   validateNonNegative,
   validateRouteInputs,
@@ -102,8 +108,37 @@ describe("finalizeRoute y agregaciones", () => {
     // junio: 15 paquetes; julio: 4
     expect(totalsForKey(agg.porMes, "2026-06").paquetes).toBe(15);
     expect(totalsForKey(agg.porMes, "2026-07").paquetes).toBe(4);
-    // 27 y 28 de junio caen en la misma semana ISO (W26)
-    expect(totalsForKey(agg.porSemana, "2026-W26").paquetes).toBe(15);
+    // Semana de PAGO sáb→vie: 27 jun (sáb), 28 jun (dom) y 1 jul (mié) caen todas
+    // en la semana que inicia el sábado 27 jun → una sola semana con 19 paquetes.
+    expect(totalsForKey(agg.porSemana, "2026-06-27").paquetes).toBe(19);
+  });
+});
+
+describe("semana de pago (sábado→viernes)", () => {
+  it("payWeekStart mueve al sábado; payWeekEnd es el viernes de cierre", () => {
+    expect(payWeekStart("2026-06-27")).toBe("2026-06-27"); // sábado
+    expect(payWeekStart("2026-06-28")).toBe("2026-06-27"); // domingo → mismo
+    expect(payWeekStart("2026-07-01")).toBe("2026-06-27"); // miércoles → mismo
+    expect(payWeekStart("2026-07-03")).toBe("2026-06-27"); // viernes (cierre)
+    expect(payWeekStart("2026-07-04")).toBe("2026-07-04"); // sábado siguiente
+    expect(payWeekEnd("2026-06-27")).toBe("2026-07-03"); // viernes
+    expect(payWeekKey("2026-06-30")).toBe("2026-06-27");
+  });
+
+  it("payWeekLabel y monthLabel legibles", () => {
+    expect(payWeekLabel("2026-06-27")).toBe("27 jun – 3 jul");
+    expect(monthLabel("2026-06")).toBe("junio 2026");
+  });
+
+  it("respeta pay_week_start_day de la config (ej. domingo=0)", () => {
+    const routes = [
+      finalizeRoute({ fecha: "2026-06-27", origen: "ontrac", paquetes: 3, paradas: 3, detalle: [] }, { millas: 0, tarifa: 1.7 }),
+      finalizeRoute({ fecha: "2026-06-28", origen: "ontrac", paquetes: 2, paradas: 2, detalle: [] }, { millas: 0, tarifa: 1.7 }),
+    ];
+    // Con inicio domingo, el 27 (sáb) y el 28 (dom) quedan en semanas distintas.
+    const cfg = { gas_price: 3.2, mpg: 17, maintenance_cost_per_mile: 0.1, pay_week_start_day: 0 };
+    const agg = aggregate(routes, cfg);
+    expect(agg.porSemana).toHaveLength(2);
   });
 });
 

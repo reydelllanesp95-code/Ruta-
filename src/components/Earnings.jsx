@@ -14,9 +14,11 @@ import { parseRoutes } from "../lib/parseRoutes.js";
 import { readRouteFiles } from "../lib/importFile.js";
 import {
   aggregate,
-  currentWeekKey,
+  currentPayWeekKey,
   currentMonthKey,
   totalsForKey,
+  payWeekLabel,
+  monthLabel,
 } from "../lib/earnings.js";
 import { loadConfig, saveConfig } from "../lib/config.js";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
@@ -81,8 +83,24 @@ export default function Earnings() {
 
   // Agregaciones memoizadas: recalculan al cambiar rutas o config. [Aud 16]
   const agg = useMemo(() => aggregate(routes, config), [routes, config]);
-  const semana = useMemo(() => totalsForKey(agg.porSemana, currentWeekKey()), [agg]);
-  const mes = useMemo(() => totalsForKey(agg.porMes, currentMonthKey()), [agg]);
+
+  // Muestra el período ACTUAL; si está vacío, cae al más reciente con datos
+  // (lista ya ordenada desc). Así "Este mes" no queda en $0 al iniciar el mes.
+  const semanaInfo = useMemo(() => {
+    const key = currentPayWeekKey(config.pay_week_start_day);
+    const actual = agg.porSemana.find((w) => w.key === key);
+    const item = actual || agg.porSemana[0] || totalsForKey([], key);
+    const esActual = item.key === key;
+    return { totals: item, label: esActual ? "Esta semana" : payWeekLabel(item.key) };
+  }, [agg, config]);
+
+  const mesInfo = useMemo(() => {
+    const key = currentMonthKey();
+    const actual = agg.porMes.find((m) => m.key === key);
+    const item = actual || agg.porMes[0] || totalsForKey([], key);
+    const esActual = item.key === key;
+    return { totals: item, label: esActual ? "Este mes" : monthLabel(item.key) };
+  }, [agg]);
   const routesOrdenadas = useMemo(
     () => [...routes].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
     [routes]
@@ -213,7 +231,12 @@ export default function Earnings() {
       </div>
 
       <div className="px-4 pb-28 pt-3 space-y-4">
-        <StatsCards semana={semana} mes={mes} />
+        <StatsCards
+          semana={semanaInfo.totals}
+          mes={mesInfo.totals}
+          semanaLabel={semanaInfo.label}
+          mesLabel={mesInfo.label}
+        />
 
         <ConfigPanel config={config} onSave={onSaveConfig} />
 
