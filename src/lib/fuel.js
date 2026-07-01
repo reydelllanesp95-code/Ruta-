@@ -1,7 +1,7 @@
 // Fuel-ups (llenados de gasolina) y MPG real tanque-a-tanque. Lógica PURA.
 // Nada aquí persiste; el MPG efectivo se calcula en runtime y NO se guarda.
 
-import { makeUUID, round2 } from "./earnings.js";
+import { makeUUID, round2, monthKey, payWeekKey } from "./earnings.js";
 
 // Redondea a 1 decimal (para mostrar MPG).
 function round1(n) {
@@ -99,4 +99,66 @@ export function totalFuelSpend(fuelups) {
     if (Number.isFinite(c) && c > 0) total += c;
   }
   return round2(total);
+}
+
+// ---- Insights de gasolina por fecha (derivados, no se persisten) ----
+
+// Días promedio entre llenados. Necesita >= 2 fechas válidas; si no, null.
+export function avgDaysBetweenFillups(fuelups) {
+  const fechas = (fuelups || [])
+    .map((f) => String(f.fecha || ""))
+    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
+    .map((s) => Date.parse(s + "T00:00:00Z"))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (fechas.length < 2) return null;
+  const totalDias = (fechas[fechas.length - 1] - fechas[0]) / 86400000;
+  return round1(totalDias / (fechas.length - 1));
+}
+
+// Un llenado cuenta para el gasto SOLO si tiene costo real (> 0). Los que no
+// tienen costo se excluyen del total y se reportan por separado (nunca $0).
+function conCostoReal(f) {
+  const c = Number(f.costo);
+  return f.costo != null && Number.isFinite(c) && c > 0;
+}
+
+// Gasto de gasolina por semana de pago (sáb→vie) y por mes, + resumen de cuántos
+// llenados no tienen costo (para avisar "N de M sin costo — total parcial").
+export function fuelSpendByPeriod(fuelups, weekStartDow = 6) {
+  const semanas = new Map();
+  const meses = new Map();
+  let total = 0;
+  let conCosto = 0;
+  let sinCosto = 0;
+
+  for (const f of fuelups || []) {
+    if (!conCostoReal(f)) {
+      sinCosto += 1;
+      continue;
+    }
+    const c = Number(f.costo);
+    total = round2(total + c);
+    conCosto += 1;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(f.fecha || ""))) {
+      const wk = payWeekKey(f.fecha, weekStartDow);
+      semanas.set(wk, round2((semanas.get(wk) || 0) + c));
+      const mk = monthKey(f.fecha);
+      meses.set(mk, round2((meses.get(mk) || 0) + c));
+    }
+  }
+
+  const toArr = (map) =>
+    Array.from(map.entries())
+      .map(([key, gasto]) => ({ key, gasto }))
+      .sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0));
+
+  return {
+    total,
+    conCosto,
+    sinCosto,
+    count: (fuelups || []).length,
+    porSemana: toArr(semanas),
+    porMes: toArr(meses),
+  };
 }
