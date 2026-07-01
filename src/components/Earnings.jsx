@@ -11,6 +11,7 @@ import { T } from "../lib/theme.js";
 import { KEY_ROUTES } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes } from "../lib/parseRoutes.js";
+import { readRouteFile } from "../lib/importFile.js";
 import {
   aggregate,
   currentWeekKey,
@@ -78,8 +79,8 @@ export default function Earnings() {
     e.target.value = ""; // permitir re-seleccionar el mismo archivo
     if (!file) return;
     try {
-      const text = await file.text();
-      const result = parseRoutes(text, file.name); // [Aud 18] try/catch
+      const { text, filename } = await readRouteFile(file); // acepta .zip de OnTrac
+      const result = parseRoutes(text, filename); // [Aud 18] try/catch
       if (!result || result.length === 0) {
         setMsg({ tipo: "error", texto: "No encontré rutas en el archivo." });
         return;
@@ -199,7 +200,13 @@ export default function Earnings() {
           </button>
         </div>
 
-        <input ref={fileRef} type="file" accept=".csv,.json" onChange={onFile} className="hidden" />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".zip,.csv,.json,application/zip,text/csv,application/json,text/plain"
+          onChange={onFile}
+          className="hidden"
+        />
         <input ref={backupRef} type="file" accept=".json" onChange={onImportBackup} className="hidden" />
 
         {msg && (
