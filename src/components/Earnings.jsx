@@ -8,7 +8,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes } from "../lib/parseRoutes.js";
 import { readRouteFiles } from "../lib/importFile.js";
@@ -21,9 +21,11 @@ import {
   monthLabel,
 } from "../lib/earnings.js";
 import { loadConfig, saveConfig } from "../lib/config.js";
+import { effectiveMpg, makeFuelup } from "../lib/fuel.js";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
 import StatsCards from "./earnings/StatsCards.jsx";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
+import FuelupsPanel from "./earnings/FuelupsPanel.jsx";
 import WeeklySummary from "./earnings/WeeklySummary.jsx";
 import MonthlySummary from "./earnings/MonthlySummary.jsx";
 import RouteCard from "./earnings/RouteCard.jsx";
@@ -32,6 +34,7 @@ import ImportDialog from "./earnings/ImportDialog.jsx";
 export default function Earnings() {
   const [routes, setRoutes] = useState([]);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [fuelups, setFuelups] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -44,10 +47,15 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg] = await Promise.all([storage.loadJSON(KEY_ROUTES, []), loadConfig()]);
+      const [data, cfg, fu] = await Promise.all([
+        storage.loadJSON(KEY_ROUTES, []),
+        loadConfig(),
+        storage.loadJSON(KEY_FUELUPS, []),
+      ]);
       if (mounted) {
         setRoutes(Array.isArray(data) ? data : []);
         setConfig(cfg);
+        setFuelups(Array.isArray(fu) ? fu : []);
         setLoaded(true);
       }
     })();
@@ -81,8 +89,22 @@ export default function Earnings() {
     }
   }
 
-  // Agregaciones memoizadas: recalculan al cambiar rutas o config. [Aud 16]
-  const agg = useMemo(() => aggregate(routes, config), [routes, config]);
+  function persistFuelups(next) {
+    setFuelups(next);
+    storage.saveJSON(KEY_FUELUPS, next).catch((err) =>
+      setMsg({ tipo: "error", texto: "No se pudo guardar la gasolina: " + (err.message || err) })
+    );
+  }
+  const addFuelup = (input) => persistFuelups([...fuelups, makeFuelup(input)]);
+  const deleteFuelup = (id) => persistFuelups(fuelups.filter((f) => f.id !== id));
+
+  // MPG efectivo: DERIVADO en memoria, NUNCA se persiste. [ajuste 2]
+  // Si hay >=2 llenados válidos usa el MPG real; si no, el asumido de config.
+  const effInfo = useMemo(() => effectiveMpg(config, fuelups), [config, fuelups]);
+  const effConfig = useMemo(() => ({ ...config, mpg: effInfo.mpg }), [config, effInfo.mpg]);
+
+  // Agregaciones memoizadas: recalculan al cambiar rutas o el MPG efectivo. [Aud 16]
+  const agg = useMemo(() => aggregate(routes, effConfig), [routes, effConfig]);
 
   // Muestra el período ACTUAL; si está vacío, cae al más reciente con datos
   // (lista ya ordenada desc). Así "Este mes" no queda en $0 al iniciar el mes.
@@ -179,8 +201,14 @@ export default function Earnings() {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const data = await storage.loadJSON(KEY_ROUTES, []);
+      const [data, cfg, fu] = await Promise.all([
+        storage.loadJSON(KEY_ROUTES, []),
+        loadConfig(),
+        storage.loadJSON(KEY_FUELUPS, []),
+      ]);
       setRoutes(Array.isArray(data) ? data : []);
+      setConfig(cfg);
+      setFuelups(Array.isArray(fu) ? fu : []);
       setMsg({ tipo: "ok", texto: `Respaldo restaurado: ${res.rutas} rutas, ${res.codigos} códigos.` });
     } catch (err) {
       setMsg({ tipo: "error", texto: err.message || String(err) });
@@ -240,6 +268,23 @@ export default function Earnings() {
 
         <ConfigPanel config={config} onSave={onSaveConfig} />
 
+        {/* Indicador visible de qué MPG se está usando ahora. [ajuste 1] */}
+        <div
+          className="text-[12px] px-1 -mt-1"
+          style={{ color: effInfo.source === "real" ? T.ok : T.textFaint }}
+        >
+          {effInfo.source === "real"
+            ? `Calculando con MPG real: ${effInfo.real}`
+            : `Calculando con MPG asumido: ${effInfo.mpg}`}
+        </div>
+
+        <FuelupsPanel
+          fuelups={fuelups}
+          effInfo={effInfo}
+          onAdd={addFuelup}
+          onDelete={deleteFuelup}
+        />
+
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => fileRef.current?.click()}
@@ -295,7 +340,7 @@ export default function Earnings() {
                 <RouteCard
                   key={r.id}
                   route={r}
-                  config={config}
+                  config={effConfig}
                   onSave={(fields) => updateRoute(r.id, fields)}
                   onDelete={deleteRoute}
                 />

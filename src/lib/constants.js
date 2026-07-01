@@ -11,6 +11,7 @@ export const SCHEMA_VERSION = 1;
 export const KEY_CODES = "gate_codes_v3"; // directorio de códigos (existente)
 export const KEY_ROUTES = "route_earnings_v1"; // rutas/ganancias
 export const KEY_CONFIG = "ruta_config_v1"; // configuración global (gas/mpg/mant)
+export const KEY_FUELUPS = "ruta_fuelups_v1"; // historial de llenados de gasolina
 
 export const UNCONFIRMED_LABEL = "Sin confirmar zona";
 export const UNKNOWN_ADDRESS = "Dirección desconocida";
