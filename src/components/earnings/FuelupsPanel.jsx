@@ -1,11 +1,16 @@
 import React, { useState } from "react";
 import { Fuel, Plus, Trash2, X, ChevronDown, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
-import { todayISO, formatMoney } from "../../lib/earnings.js";
-import { validateFuelup, maxOdometro } from "../../lib/fuel.js";
+import { todayISO, formatMoney, payWeekLabel, monthLabel } from "../../lib/earnings.js";
+import {
+  validateFuelup,
+  maxOdometro,
+  avgDaysBetweenFillups,
+  fuelSpendByPeriod,
+} from "../../lib/fuel.js";
 
-// Panel de llenados de gasolina (fuel-ups) para calcular el MPG real.
-export default function FuelupsPanel({ fuelups, effInfo, onAdd, onDelete }) {
+// Panel de llenados de gasolina (fuel-ups): MPG real + insights de gasto/frecuencia.
+export default function FuelupsPanel({ fuelups, effInfo, weekStartDow = 6, onAdd, onDelete }) {
   const [open, setOpen] = useState(false);
   const [fecha, setFecha] = useState(todayISO());
   const [galones, setGalones] = useState("");
@@ -14,6 +19,8 @@ export default function FuelupsPanel({ fuelups, effInfo, onAdd, onDelete }) {
   const [error, setError] = useState("");
 
   const prevOdo = maxOdometro(fuelups);
+  const avgDias = avgDaysBetweenFillups(fuelups);
+  const gasto = fuelSpendByPeriod(fuelups, weekStartDow);
 
   function add() {
     setError("");
@@ -77,6 +84,48 @@ export default function FuelupsPanel({ fuelups, effInfo, onAdd, onDelete }) {
           >
             <Plus size={14} /> Agregar llenado
           </button>
+
+          {/* Insights de gasolina (derivados, no se guardan) */}
+          {fuelups.length > 0 && (
+            <div className="rounded-lg p-2.5 space-y-1.5" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
+              {avgDias != null && (
+                <div className="text-[12.5px]" style={{ color: T.textSecondary }}>
+                  Cargas cada ~<b>{avgDias}</b> días
+                </div>
+              )}
+              <div className="flex items-center justify-between text-[12.5px]">
+                <span style={{ color: T.textSecondary }}>Gasto en gas (registrado)</span>
+                <span className="gc-code" style={{ color: T.textPrimary }}>{formatMoney(gasto.total)}</span>
+              </div>
+              {gasto.sinCosto > 0 && (
+                <div className="text-[11.5px]" style={{ color: T.revisar }}>
+                  {gasto.sinCosto} de {gasto.count} llenados sin costo — total parcial.
+                </div>
+              )}
+              {gasto.porSemana.length > 0 && (
+                <div className="pt-1" style={{ borderTop: `1px solid ${T.borderSoft}` }}>
+                  <div className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>Por semana (sáb→vie)</div>
+                  {gasto.porSemana.slice(0, 3).map((w) => (
+                    <div key={w.key} className="flex justify-between text-[12px]">
+                      <span style={{ color: T.textSecondary }}>{payWeekLabel(w.key)}</span>
+                      <span className="gc-code" style={{ color: T.textPrimary }}>{formatMoney(w.gasto)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {gasto.porMes.length > 0 && (
+                <div className="pt-1" style={{ borderTop: `1px solid ${T.borderSoft}` }}>
+                  <div className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>Por mes</div>
+                  {gasto.porMes.slice(0, 3).map((m) => (
+                    <div key={m.key} className="flex justify-between text-[12px]">
+                      <span style={{ color: T.textSecondary }}>{monthLabel(m.key)}</span>
+                      <span className="gc-code" style={{ color: T.textPrimary }}>{formatMoney(m.gasto)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {listado.length > 0 && (
             <div className="space-y-1.5">

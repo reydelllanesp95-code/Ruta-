@@ -6,6 +6,8 @@ import {
   realMpg,
   effectiveMpg,
   makeFuelup,
+  avgDaysBetweenFillups,
+  fuelSpendByPeriod,
 } from "../fuel.js";
 import { DEFAULT_CONFIG } from "../constants.js";
 
@@ -83,6 +85,33 @@ describe("effectiveMpg [ajustes 1 y 2: derivado]", () => {
     expect(e.source).toBe("assumed");
     expect(e.mpg).toBe(DEFAULT_CONFIG.mpg);
     expect(e.real).toBe(null);
+  });
+});
+
+describe("insights de gasolina [Fase 3B]", () => {
+  it("avgDaysBetweenFillups: < 2 fechas → null; si no, promedio", () => {
+    expect(avgDaysBetweenFillups([])).toBe(null);
+    expect(avgDaysBetweenFillups([{ fecha: "2026-06-01" }])).toBe(null);
+    // 01, 05, 09 → intervalos 4 y 4 → promedio 4
+    const fu = [{ fecha: "2026-06-01" }, { fecha: "2026-06-05" }, { fecha: "2026-06-09" }];
+    expect(avgDaysBetweenFillups(fu)).toBe(4);
+  });
+
+  it("fuelSpendByPeriod: excluye sin costo (no $0) y agrupa por semana/mes", () => {
+    const fu = [
+      { fecha: "2026-06-27", costo: 40 }, // sáb → semana 2026-06-27
+      { fecha: "2026-06-28", costo: 30 }, // dom → misma semana de pago
+      { fecha: "2026-07-04", costo: 20 }, // sáb → semana siguiente
+      { fecha: "2026-07-05", costo: null }, // sin costo → excluido
+    ];
+    const r = fuelSpendByPeriod(fu, 6);
+    expect(r.total).toBe(90); // 40+30+20 (el null no cuenta como 0)
+    expect(r.conCosto).toBe(3);
+    expect(r.sinCosto).toBe(1);
+    expect(r.porSemana.find((w) => w.key === "2026-06-27").gasto).toBe(70);
+    expect(r.porSemana.find((w) => w.key === "2026-07-04").gasto).toBe(20);
+    expect(r.porMes.find((m) => m.key === "2026-06").gasto).toBe(70);
+    expect(r.porMes.find((m) => m.key === "2026-07").gasto).toBe(20);
   });
 });
 

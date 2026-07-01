@@ -1,6 +1,6 @@
 // Respaldo: exportar/importar toda la app como JSON. [Aud 13][Aud 14]
 
-import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, SCHEMA_VERSION } from "./constants.js";
+import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { loadConfig, saveConfig } from "./config.js";
 
@@ -13,11 +13,12 @@ export async function buildBackup() {
   const rutas = (await loadJSON(KEY_ROUTES, [])) || [];
   const config = await loadConfig();
   const fuelups = (await loadJSON(KEY_FUELUPS, [])) || [];
+  const mantenimiento = (await loadJSON(KEY_MAINT, [])) || [];
   return {
     type: BACKUP_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportadoEn: new Date().toISOString(),
-    data: { codigos, rutas, config, fuelups },
+    data: { codigos, rutas, config, fuelups, mantenimiento },
   };
 }
 
@@ -55,7 +56,16 @@ export async function restoreBackup(jsonText) {
   // fuelups opcional: backups viejos (sin fuelups) → []. [Fase 2]
   const fuelups = Array.isArray(parsed.data.fuelups) ? parsed.data.fuelups : [];
   await saveJSON(KEY_FUELUPS, fuelups);
-  return { codigos: codigos.length, rutas: rutas.length, config, fuelups: fuelups.length };
+  // mantenimiento opcional: backups viejos (sin mantenimiento) → []. [Fase 3]
+  const mantenimiento = Array.isArray(parsed.data.mantenimiento) ? parsed.data.mantenimiento : [];
+  await saveJSON(KEY_MAINT, mantenimiento);
+  return {
+    codigos: codigos.length,
+    rutas: rutas.length,
+    config,
+    fuelups: fuelups.length,
+    mantenimiento: mantenimiento.length,
+  };
 }
 
 // Genera y descarga un CSV de plantilla manual desde la app.
