@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Package, MapPin, Navigation, Pencil, Trash2, Save, X } from "lucide-react";
 import { T } from "../../lib/theme.js";
-import { formatMoney, validateNonNegative, round2 } from "../../lib/earnings.js";
+import { formatMoney, validateNonNegative, round2, routeEconomics } from "../../lib/earnings.js";
 
 const MESES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 function fechaBonita(iso) {
@@ -10,8 +10,10 @@ function fechaBonita(iso) {
   return `${Number(m[3])} ${MESES_CORTO[Number(m[2]) - 1]} ${m[1]}`;
 }
 
-export default function RouteCard({ route, onSave, onDelete }) {
+export default function RouteCard({ route, config, onSave, onDelete }) {
   const [editing, setEditing] = useState(false);
+  // Economía derivada (nunca se guarda): gas, mantenimiento, neto, $/milla.
+  const eco = routeEconomics(route, config);
   const [millas, setMillas] = useState(String(route.millas ?? 0));
   const [tarifa, setTarifa] = useState(String(route.tarifaUsada ?? 1.7));
   const [error, setError] = useState("");
@@ -82,6 +84,17 @@ export default function RouteCard({ route, onSave, onDelete }) {
         </div>
       </div>
 
+      {/* Desglose de ganancia REAL neta (derivado en runtime, no se guarda) */}
+      <div
+        className="mt-3 pt-3 grid grid-cols-4 gap-1"
+        style={{ borderTop: `1px solid ${T.borderSoft}` }}
+      >
+        <Metric label="Neto" value={formatMoney(eco.net_profit)} color={eco.net_profit >= 0 ? T.ok : T.red} strong />
+        <Metric label="− Gas" value={formatMoney(eco.fuel_cost)} color={T.textSecondary} />
+        <Metric label="− Mant" value={formatMoney(eco.maintenance_est)} color={T.textSecondary} />
+        <Metric label="$/milla" value={formatMoney(eco.cost_per_mile)} color={T.textSecondary} />
+      </div>
+
       {editing && (
         <div className="mt-3 pt-3 space-y-2" style={{ borderTop: `1px solid ${T.borderSoft}` }}>
           <div className="grid grid-cols-2 gap-2">
@@ -141,6 +154,22 @@ export default function RouteCard({ route, onSave, onDelete }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Metric({ label, value, color, strong }) {
+  return (
+    <div className="text-center">
+      <div className="text-[9.5px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
+        {label}
+      </div>
+      <div
+        className="gc-code mt-0.5"
+        style={{ color, fontSize: strong ? 15 : 12.5, fontWeight: strong ? 700 : 500 }}
+      >
+        {value}
+      </div>
     </div>
   );
 }

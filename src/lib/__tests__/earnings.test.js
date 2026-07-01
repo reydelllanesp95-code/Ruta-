@@ -12,6 +12,11 @@ import {
   aggregate,
   totalsForKey,
   round2,
+  fuelCost,
+  maintenanceEst,
+  netProfit,
+  costPerMile,
+  routeEconomics,
 } from "../earnings.js";
 
 describe("fechas", () => {
@@ -138,5 +143,90 @@ describe("almacenamiento y respaldo (con localStorage simulado)", () => {
     };
     const storage = await import("../storage.js");
     await expect(storage.saveJSON("k", { a: 1 })).rejects.toThrow();
+  });
+
+  it("backup nuevo incluye config; backup viejo (sin config) restaura con default", async () => {
+    const storage = await import("../storage.js");
+    const backup = await import("../backup.js");
+    const { loadConfig } = await import("../config.js");
+    // Backup nuevo
+    await storage.saveJSON("route_earnings_v1", []);
+    await storage.saveJSON("gate_codes_v3", []);
+    const { saveConfig } = await import("../config.js");
+    await saveConfig({ gas_price: 4.1, mpg: 18, maintenance_cost_per_mile: 0.12 });
+    const b = await backup.buildBackup();
+    expect(b.data.config.gas_price).toBe(4.1);
+    // Backup VIEJO: solo codigos+rutas (sin config)
+    const viejo = { type: "ruta-backup", schemaVersion: 1, data: { codigos: [], rutas: [] } };
+    const res = await backup.restoreBackup(JSON.stringify(viejo));
+    expect(res.config).toBe(false); // no venía config
+    const cfg = await loadConfig();
+    expect(cfg.mpg).toBe(18); // config previa se mantiene, no se borra
+  });
+});
+
+// ---- Datos derivados de costo (Fase 1: ganancia neta) ----
+describe("costos derivados (fuel / mantenimiento / neto / $ por milla)", () => {
+  it("fuelCost = millas/mpg*precio, con guardas", () => {
+    expect(fuelCost(100, 17, 3.4)).toBe(round2((100 / 17) * 3.4));
+    expect(fuelCost(0, 17, 3.4)).toBe(0); // millas=0
+    expect(fuelCost(100, 0, 3.4)).toBe(0); // mpg 0
+    expect(fuelCost(100, null, 3.4)).toBe(0); // mpg null
+    expect(fuelCost(100, 17, undefined)).toBe(0); // gas faltante
+    expect(fuelCost("x", 17, 3.4)).toBe(0); // no numérico
+    expect(Number.isNaN(fuelCost(100, 0, 0))).toBe(false);
+  });
+
+  it("maintenanceEst = millas*perMile", () => {
+    expect(maintenanceEst(50, 0.1)).toBe(5);
+    expect(maintenanceEst(0, 0.1)).toBe(0);
+    expect(maintenanceEst(50, 0)).toBe(0);
+    expect(maintenanceEst(50, "x")).toBe(0);
+  });
+
+  it("netProfit = bruta - fuel - mant", () => {
+    expect(netProfit(166.6, 20, 5)).toBe(141.6);
+    expect(netProfit(100, 0, 0)).toBe(100);
+  });
+
+  it("costPerMile con millas=0 → 0 (sin NaN/Infinity)", () => {
+    expect(costPerMile(20, 5, 0)).toBe(0);
+    expect(costPerMile(20, 5, 100)).toBe(round2(25 / 100));
+  });
+
+  it("routeEconomics devuelve el desglose completo", () => {
+    const route = { millas: 100, ganancia: 166.6 };
+    const cfg = { gas_price: 3.4, mpg: 17, maintenance_cost_per_mile: 0.1 };
+    const eco = routeEconomics(route, cfg);
+    expect(eco.fuel_cost).toBe(round2((100 / 17) * 3.4));
+    expect(eco.maintenance_est).toBe(10);
+    expect(eco.net_profit).toBe(round2(166.6 - eco.fuel_cost - 10));
+    expect(eco.cost_per_mile).toBe(round2((eco.fuel_cost + 10) / 100));
+  });
+
+  it("aggregate(routes, config) suma neto/gas/mant y no rompe los campos previos", () => {
+    const cfg = { gas_price: 3.4, mpg: 17, maintenance_cost_per_mile: 0.1 };
+    const routes = [
+      finalizeRoute({ fecha: "2026-06-27", origen: "ontrac", paquetes: 98, paradas: 94, detalle: [] }, { millas: 100, tarifa: 1.7 }),
+      finalizeRoute({ fecha: "2026-06-28", origen: "ontrac", paquetes: 50, paradas: 48, detalle: [] }, { millas: 40, tarifa: 1.7 }),
+    ];
+    const agg = aggregate(routes, cfg);
+    expect(agg.total.paquetes).toBe(148); // campo previo intacto
+    expect(agg.total.millas).toBe(140);
+    // neto = bruta - gas - mant, sumado
+    const gas = fuelCost(100, 17, 3.4) + fuelCost(40, 17, 3.4);
+    const mant = maintenanceEst(100, 0.1) + maintenanceEst(40, 0.1);
+    expect(agg.total.fuel_cost).toBe(round2(gas));
+    expect(agg.total.maintenance_est).toBe(round2(mant));
+    expect(agg.total.cost_per_mile).toBe(round2((agg.total.fuel_cost + agg.total.maintenance_est) / 140));
+  });
+
+  it("aggregate sin config sigue funcionando (retrocompat)", () => {
+    const routes = [
+      finalizeRoute({ fecha: "2026-06-27", origen: "ontrac", paquetes: 10, paradas: 8, detalle: [] }, { millas: 5, tarifa: 1.7 }),
+    ];
+    const agg = aggregate(routes); // sin config
+    expect(agg.total.paquetes).toBe(10);
+    expect(typeof agg.total.net_profit).toBe("number");
   });
 });

@@ -2,18 +2,21 @@
 
 import { KEY_CODES, KEY_ROUTES, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
+import { loadConfig, saveConfig } from "./config.js";
 
 const BACKUP_TYPE = "ruta-backup";
 
-// Construye el objeto de respaldo con todo lo guardado.
+// Construye el objeto de respaldo con todo lo guardado. Se EXTIENDE con `config`
+// sin reestructurar: se mantienen `type` y las claves en español. [Aud 14]
 export async function buildBackup() {
   const codigos = (await loadJSON(KEY_CODES, [])) || [];
   const rutas = (await loadJSON(KEY_ROUTES, [])) || [];
+  const config = await loadConfig();
   return {
     type: BACKUP_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportadoEn: new Date().toISOString(),
-    data: { codigos, rutas },
+    data: { codigos, rutas, config },
   };
 }
 
@@ -42,7 +45,13 @@ export async function restoreBackup(jsonText) {
   const rutas = Array.isArray(parsed.data.rutas) ? parsed.data.rutas : [];
   await saveJSON(KEY_CODES, codigos);
   await saveJSON(KEY_ROUTES, rutas);
-  return { codigos: codigos.length, rutas: rutas.length };
+  // config es opcional: backups viejos (sin config) usan defaults seguros. [Aud 14]
+  let config = false;
+  if (parsed.data.config) {
+    await saveConfig(parsed.data.config); // saveConfig ya sanea/defaultea
+    config = true;
+  }
+  return { codigos: codigos.length, rutas: rutas.length, config };
 }
 
 // Genera y descarga un CSV de plantilla manual desde la app.

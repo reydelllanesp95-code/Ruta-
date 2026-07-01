@@ -8,7 +8,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES } from "../lib/constants.js";
+import { KEY_ROUTES, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes } from "../lib/parseRoutes.js";
 import { readRouteFiles } from "../lib/importFile.js";
@@ -18,8 +18,10 @@ import {
   currentMonthKey,
   totalsForKey,
 } from "../lib/earnings.js";
+import { loadConfig, saveConfig } from "../lib/config.js";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
 import StatsCards from "./earnings/StatsCards.jsx";
+import ConfigPanel from "./earnings/ConfigPanel.jsx";
 import WeeklySummary from "./earnings/WeeklySummary.jsx";
 import MonthlySummary from "./earnings/MonthlySummary.jsx";
 import RouteCard from "./earnings/RouteCard.jsx";
@@ -27,6 +29,7 @@ import ImportDialog from "./earnings/ImportDialog.jsx";
 
 export default function Earnings() {
   const [routes, setRoutes] = useState([]);
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -39,9 +42,10 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const data = await storage.loadJSON(KEY_ROUTES, []);
+      const [data, cfg] = await Promise.all([storage.loadJSON(KEY_ROUTES, []), loadConfig()]);
       if (mounted) {
         setRoutes(Array.isArray(data) ? data : []);
+        setConfig(cfg);
         setLoaded(true);
       }
     })();
@@ -65,8 +69,18 @@ export default function Earnings() {
     });
   }
 
-  // Agregaciones memoizadas: se recalculan solo cuando cambian las rutas. [Aud 16]
-  const agg = useMemo(() => aggregate(routes), [routes]);
+  async function onSaveConfig(next) {
+    try {
+      const clean = await saveConfig(next);
+      setConfig(clean);
+      setMsg({ tipo: "ok", texto: "Ajustes de costos guardados." });
+    } catch (err) {
+      setMsg({ tipo: "error", texto: "No se pudieron guardar los ajustes: " + (err.message || err) });
+    }
+  }
+
+  // Agregaciones memoizadas: recalculan al cambiar rutas o config. [Aud 16]
+  const agg = useMemo(() => aggregate(routes, config), [routes, config]);
   const semana = useMemo(() => totalsForKey(agg.porSemana, currentWeekKey()), [agg]);
   const mes = useMemo(() => totalsForKey(agg.porMes, currentMonthKey()), [agg]);
   const routesOrdenadas = useMemo(
@@ -201,6 +215,8 @@ export default function Earnings() {
       <div className="px-4 pb-28 pt-3 space-y-4">
         <StatsCards semana={semana} mes={mes} />
 
+        <ConfigPanel config={config} onSave={onSaveConfig} />
+
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => fileRef.current?.click()}
@@ -256,6 +272,7 @@ export default function Earnings() {
                 <RouteCard
                   key={r.id}
                   route={r}
+                  config={config}
                   onSave={(fields) => updateRoute(r.id, fields)}
                   onDelete={deleteRoute}
                 />

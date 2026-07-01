@@ -29,6 +29,20 @@ function Card({ title, totals }) {
           <Navigation size={12} /> {totals.millas} mi
         </span>
       </div>
+      <div
+        className="mt-2 pt-2 flex items-baseline justify-between"
+        style={{ borderTop: `1px solid ${T.borderSoft}` }}
+      >
+        <span className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
+          Neto
+        </span>
+        <span
+          className="gc-code text-[15px] font-semibold"
+          style={{ color: (totals.net_profit ?? 0) >= 0 ? T.ok : T.red }}
+        >
+          {formatMoney(totals.net_profit)}
+        </span>
+      </div>
     </div>
   );
 }

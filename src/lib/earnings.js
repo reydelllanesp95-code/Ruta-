@@ -1,7 +1,7 @@
 // Lógica pura de ganancias: fechas, hash, validación y agregaciones. [Aud 5][Aud 9]
 // Sin React, fácil de testear. [Aud 21]
 
-import { SCHEMA_VERSION, TARIFA_DEFAULT } from "./constants.js";
+import { SCHEMA_VERSION, TARIFA_DEFAULT, DEFAULT_CONFIG } from "./constants.js";
 
 export function round2(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -137,6 +137,61 @@ export function validateRouteInputs({ millas, tarifa }) {
   return { ok: errors.length === 0, errors, millas: m.value, tarifa: t.value };
 }
 
+// ---- Datos DERIVADOS de costo (NUNCA se persisten; runtime puro) ----
+// fuel_cost = (millas / mpg) * gas_price
+// maintenance_est = millas * maintenance_cost_per_mile
+// net_profit = ganancia_bruta - fuel_cost - maintenance_est
+// cost_per_mile = (fuel_cost + maintenance_est) / millas
+// Todas blindadas contra NaN, millas=0, mpg 0/null y gas_price faltante.
+
+export function fuelCost(millas, mpg, gasPrice) {
+  const mi = Number(millas);
+  const m = Number(mpg);
+  const g = Number(gasPrice);
+  if (!Number.isFinite(mi) || mi <= 0) return 0;
+  if (!Number.isFinite(m) || m <= 0) return 0; // mpg 0/null → sin costo, no crash
+  if (!Number.isFinite(g) || g <= 0) return 0; // gas_price faltante → 0
+  return round2((mi / m) * g);
+}
+
+export function maintenanceEst(millas, perMile) {
+  const mi = Number(millas);
+  const p = Number(perMile);
+  if (!Number.isFinite(mi) || mi <= 0) return 0;
+  if (!Number.isFinite(p) || p <= 0) return 0;
+  return round2(mi * p);
+}
+
+export function netProfit(brutaGanancia, fuel, maint) {
+  const b = Number(brutaGanancia) || 0;
+  const f = Number(fuel) || 0;
+  const m = Number(maint) || 0;
+  return round2(b - f - m);
+}
+
+export function costPerMile(fuel, maint, millas) {
+  const mi = Number(millas);
+  if (!Number.isFinite(mi) || mi <= 0) return 0; // millas=0 → 0
+  const total = (Number(fuel) || 0) + (Number(maint) || 0);
+  return round2(total / mi);
+}
+
+// Economía derivada de una ruta según la config actual. No muta ni persiste.
+export function routeEconomics(route, config = DEFAULT_CONFIG) {
+  const cfg = config || DEFAULT_CONFIG;
+  const millas = Number(route && route.millas) || 0;
+  const bruta = round2(Number(route && route.ganancia) || 0);
+  const fuel = fuelCost(millas, cfg.mpg, cfg.gas_price);
+  const maint = maintenanceEst(millas, cfg.maintenance_cost_per_mile);
+  return {
+    ganancia_bruta: bruta,
+    fuel_cost: fuel,
+    maintenance_est: maint,
+    net_profit: netProfit(bruta, fuel, maint),
+    cost_per_mile: costPerMile(fuel, maint, millas),
+  };
+}
+
 // Convierte una ruta "preview" del parser en una ruta final persistible. [Aud 8]
 export function finalizeRoute(preview, { millas = 0, tarifa = TARIFA_DEFAULT } = {}) {
   const tarifaUsada = Number(tarifa);
@@ -161,38 +216,59 @@ export function finalizeRoute(preview, { millas = 0, tarifa = TARIFA_DEFAULT } =
 // ---- Agregaciones (memoizables) [Aud 4][Aud 16] ----
 
 function emptyTotals() {
-  return { rutas: 0, paquetes: 0, paradas: 0, millas: 0, ganancia: 0 };
+  return {
+    rutas: 0,
+    paquetes: 0,
+    paradas: 0,
+    millas: 0,
+    ganancia: 0, // bruta
+    fuel_cost: 0,
+    maintenance_est: 0,
+    net_profit: 0,
+  };
 }
 
-function addRoute(acc, r) {
+function addRoute(acc, r, eco) {
   acc.rutas += 1;
   acc.paquetes += Number(r.paquetes) || 0;
   acc.paradas += Number(r.paradas) || 0;
   acc.millas += Number(r.millas) || 0;
   acc.ganancia = round2(acc.ganancia + (Number(r.ganancia) || 0));
+  acc.fuel_cost = round2(acc.fuel_cost + eco.fuel_cost);
+  acc.maintenance_est = round2(acc.maintenance_est + eco.maintenance_est);
+  acc.net_profit = round2(acc.net_profit + eco.net_profit);
   return acc;
 }
 
+// Agrega el cost_per_mile del periodo a partir de sus totales sumados.
+function withCostPerMile(t) {
+  return { ...t, cost_per_mile: costPerMile(t.fuel_cost, t.maintenance_est, t.millas) };
+}
+
 // Devuelve totales globales y agrupados por semana y por mes (ordenados desc).
-export function aggregate(routes) {
+// `config` es opcional (default DEFAULT_CONFIG) → llamadas antiguas sin config
+// siguen funcionando; los derivados se calculan en runtime, nunca se guardan.
+export function aggregate(routes, config = DEFAULT_CONFIG) {
+  const cfg = config || DEFAULT_CONFIG;
   const total = emptyTotals();
   const semanas = new Map();
   const meses = new Map();
   for (const r of routes) {
-    addRoute(total, r);
+    const eco = routeEconomics(r, cfg);
+    addRoute(total, r, eco);
     const wk = weekKey(r.fecha);
     if (!semanas.has(wk)) semanas.set(wk, emptyTotals());
-    addRoute(semanas.get(wk), r);
+    addRoute(semanas.get(wk), r, eco);
     const mk = monthKey(r.fecha);
     if (!meses.has(mk)) meses.set(mk, emptyTotals());
-    addRoute(meses.get(mk), r);
+    addRoute(meses.get(mk), r, eco);
   }
   const toSortedArray = (map) =>
     Array.from(map.entries())
-      .map(([key, totals]) => ({ key, ...totals }))
+      .map(([key, totals]) => ({ key, ...withCostPerMile(totals) }))
       .sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0));
   return {
-    total,
+    total: withCostPerMile(total),
     porSemana: toSortedArray(semanas),
     porMes: toSortedArray(meses),
   };
@@ -201,5 +277,5 @@ export function aggregate(routes) {
 // Totales del periodo actual (esta semana / este mes).
 export function totalsForKey(list, key) {
   const found = list.find((x) => x.key === key);
-  return found || { key, ...emptyTotals() };
+  return found || { key, ...withCostPerMile(emptyTotals()) };
 }
