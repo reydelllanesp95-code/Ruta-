@@ -11,7 +11,7 @@ import { T } from "../lib/theme.js";
 import { KEY_ROUTES } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes } from "../lib/parseRoutes.js";
-import { readRouteFile } from "../lib/importFile.js";
+import { readRouteFiles } from "../lib/importFile.js";
 import {
   aggregate,
   currentWeekKey,
@@ -79,13 +79,31 @@ export default function Earnings() {
     e.target.value = ""; // permitir re-seleccionar el mismo archivo
     if (!file) return;
     try {
-      const { text, filename } = await readRouteFile(file); // acepta .zip de OnTrac
-      const result = parseRoutes(text, filename); // [Aud 18] try/catch
-      if (!result || result.length === 0) {
-        setMsg({ tipo: "error", texto: "No encontré rutas en el archivo." });
+      // Un .zip puede traer varios manifests (uno por día). Los leemos todos.
+      const items = await readRouteFiles(file);
+      let all = [];
+      const omitidos = [];
+      for (const { text, filename } of items) {
+        try {
+          all = all.concat(parseRoutes(text, filename));
+        } catch (err) {
+          // Un archivo vacío/sin datos no debe romper todo el lote.
+          omitidos.push(`${filename}: ${err.message || err}`);
+        }
+      }
+      if (all.length === 0) {
+        setMsg({
+          tipo: "error",
+          texto: omitidos.length
+            ? "Ningún archivo tenía datos. " + omitidos[0]
+            : "No encontré rutas en el archivo.",
+        });
         return;
       }
-      setPreviews(result);
+      if (omitidos.length) {
+        setMsg({ tipo: "ok", texto: `Se omitieron ${omitidos.length} archivo(s) sin datos.` });
+      }
+      setPreviews(all);
     } catch (err) {
       setMsg({ tipo: "error", texto: err.message || String(err) });
     }

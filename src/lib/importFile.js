@@ -1,30 +1,35 @@
 // Lectura del archivo que sube el usuario. OnTrac exporta el manifest dentro de
-// un .zip, así que aquí lo descomprimimos y sacamos el CSV de adentro. También
-// acepta .csv/.json sueltos.
+// un .zip; un mismo .zip puede traer VARIOS manifests (uno por día). Aquí lo
+// descomprimimos y devolvemos TODOS los CSV de adentro. También acepta .csv/.json.
 
 import { unzipSync, strFromU8 } from "fflate";
 
-// Dado el contenido de un .zip, devuelve el texto del primer CSV (o JSON) que
-// encuentre y su nombre. Función pura, fácil de testear.
-export function extractFromZip(uint8) {
+// Dado el contenido de un .zip, devuelve TODOS los CSV/JSON de adentro como
+// [{ text, filename }], ordenados por nombre. Función pura, fácil de testear.
+export function extractAllFromZip(uint8) {
   const files = unzipSync(uint8);
-  const names = Object.keys(files).filter((n) => !n.endsWith("/") && !n.startsWith("__MACOSX"));
-  const target =
-    names.find((n) => n.toLowerCase().endsWith(".csv")) ||
-    names.find((n) => n.toLowerCase().endsWith(".json"));
-  if (!target) {
+  const names = Object.keys(files)
+    .filter((n) => !n.endsWith("/") && !n.startsWith("__MACOSX"))
+    .filter((n) => /\.(csv|json)$/i.test(n))
+    .sort();
+  if (names.length === 0) {
     throw new Error("El archivo .zip no contiene ningún CSV.");
   }
-  return { text: strFromU8(files[target]), filename: target };
+  return names.map((n) => ({ text: strFromU8(files[n]), filename: n }));
 }
 
-// Lee un File del navegador y devuelve { text, filename }, descomprimiendo si
-// es un .zip.
-export async function readRouteFile(file) {
+// Compatibilidad: primer CSV del zip.
+export function extractFromZip(uint8) {
+  return extractAllFromZip(uint8)[0];
+}
+
+// Lee un File del navegador y devuelve una lista [{ text, filename }].
+// Un .zip puede producir varios; un .csv/.json produce uno.
+export async function readRouteFiles(file) {
   const name = (file && file.name) || "";
   if (name.toLowerCase().endsWith(".zip")) {
     const buf = new Uint8Array(await file.arrayBuffer());
-    return extractFromZip(buf);
+    return extractAllFromZip(buf);
   }
-  return { text: await file.text(), filename: name };
+  return [{ text: await file.text(), filename: name }];
 }
