@@ -77,6 +77,62 @@ export function currentMonthKey(d = new Date()) {
   return monthKey(todayISO(d));
 }
 
+// ---- Semana de PAGO (configurable). El usuario cobra los viernes → la semana
+// va sábado→viernes (inicio = sábado, 6). La clave es la fecha del día de inicio.
+
+function isoFromUTC(d) {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+
+// Fecha (YYYY-MM-DD) del inicio de la semana de pago que contiene dateStr.
+export function payWeekStart(dateStr, startDow = 6) {
+  const [y, mo, da] = String(dateStr).split("-").map(Number);
+  const d = new Date(Date.UTC(y, (mo || 1) - 1, da || 1));
+  const back = (d.getUTCDay() - startDow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() - back);
+  return isoFromUTC(d);
+}
+
+// Fecha de cierre (6 días después del inicio → el día de pago).
+export function payWeekEnd(startDateStr) {
+  const [y, mo, da] = String(startDateStr).split("-").map(Number);
+  const d = new Date(Date.UTC(y, (mo || 1) - 1, da || 1));
+  d.setUTCDate(d.getUTCDate() + 6);
+  return isoFromUTC(d);
+}
+
+// Clave de agrupación semanal = fecha de inicio de la semana de pago (ordenable).
+export function payWeekKey(dateStr, startDow = 6) {
+  return payWeekStart(dateStr, startDow);
+}
+
+export function currentPayWeekKey(startDow = 6, d = new Date()) {
+  return payWeekStart(todayISO(d), startDow);
+}
+
+const MESES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const MESES_LARGO = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+export function fechaCorta(iso) {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  return `${Number(m[3])} ${MESES_CORTO[Number(m[2]) - 1]}`;
+}
+
+// Etiqueta "27 jun – 3 jul" para una semana de pago dada por su clave (inicio).
+export function payWeekLabel(startKey) {
+  return `${fechaCorta(startKey)} – ${fechaCorta(payWeekEnd(startKey))}`;
+}
+
+export function monthLabel(key) {
+  const m = String(key).match(/^(\d{4})-(\d{2})$/);
+  if (!m) return key;
+  return `${MESES_LARGO[Number(m[2]) - 1] || m[2]} ${m[1]}`;
+}
+
 // ---- Hash estable (FNV-1a) para la huella de ruta [Aud 5] ----
 
 export function hashStable(str) {
@@ -250,13 +306,14 @@ function withCostPerMile(t) {
 // siguen funcionando; los derivados se calculan en runtime, nunca se guardan.
 export function aggregate(routes, config = DEFAULT_CONFIG) {
   const cfg = config || DEFAULT_CONFIG;
+  const startDow = Number.isInteger(cfg.pay_week_start_day) ? cfg.pay_week_start_day : 6;
   const total = emptyTotals();
   const semanas = new Map();
   const meses = new Map();
   for (const r of routes) {
     const eco = routeEconomics(r, cfg);
     addRoute(total, r, eco);
-    const wk = weekKey(r.fecha);
+    const wk = payWeekKey(r.fecha, startDow); // semana de pago sáb→vie
     if (!semanas.has(wk)) semanas.set(wk, emptyTotals());
     addRoute(semanas.get(wk), r, eco);
     const mk = monthKey(r.fecha);
