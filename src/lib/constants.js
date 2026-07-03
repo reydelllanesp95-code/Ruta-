@@ -13,6 +13,7 @@ export const KEY_ROUTES = "route_earnings_v1"; // rutas/ganancias
 export const KEY_CONFIG = "ruta_config_v1"; // configuración global (gas/mpg/mant)
 export const KEY_FUELUPS = "ruta_fuelups_v1"; // historial de llenados de gasolina
 export const KEY_MAINT = "ruta_maint_v1"; // historial de mantenimiento
+export const KEY_MEALS = "ruta_meals_v1"; // gastos de comida del día de trabajo
 
 // Tipos de mantenimiento (reutilizable en UI y validación).
 export const MAINT_TYPES = ["oil", "tires", "brakes", "repair"];
@@ -21,6 +22,16 @@ export const MAINT_TYPE_LABELS = {
   tires: "Llantas",
   brakes: "Frenos",
   repair: "Reparación",
+};
+
+// Tipos de comida (reutilizable en UI y validación).
+export const MEAL_TYPES = ["desayuno", "almuerzo", "merienda", "cena", "otro"];
+export const MEAL_TYPE_LABELS = {
+  desayuno: "Desayuno",
+  almuerzo: "Almuerzo",
+  merienda: "Merienda",
+  cena: "Cena",
+  otro: "Otro",
 };
 
 export const UNCONFIRMED_LABEL = "Sin confirmar zona";

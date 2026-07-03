@@ -1,6 +1,6 @@
 // Respaldo: exportar/importar toda la app como JSON. [Aud 13][Aud 14]
 
-import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, SCHEMA_VERSION } from "./constants.js";
+import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { loadConfig, saveConfig } from "./config.js";
 
@@ -14,11 +14,12 @@ export async function buildBackup() {
   const config = await loadConfig();
   const fuelups = (await loadJSON(KEY_FUELUPS, [])) || [];
   const mantenimiento = (await loadJSON(KEY_MAINT, [])) || [];
+  const comidas = (await loadJSON(KEY_MEALS, [])) || [];
   return {
     type: BACKUP_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportadoEn: new Date().toISOString(),
-    data: { codigos, rutas, config, fuelups, mantenimiento },
+    data: { codigos, rutas, config, fuelups, mantenimiento, comidas },
   };
 }
 
@@ -59,12 +60,16 @@ export async function restoreBackup(jsonText) {
   // mantenimiento opcional: backups viejos (sin mantenimiento) → []. [Fase 3]
   const mantenimiento = Array.isArray(parsed.data.mantenimiento) ? parsed.data.mantenimiento : [];
   await saveJSON(KEY_MAINT, mantenimiento);
+  // comidas opcional: backups viejos (sin comidas) → []. [Fase 4]
+  const comidas = Array.isArray(parsed.data.comidas) ? parsed.data.comidas : [];
+  await saveJSON(KEY_MEALS, comidas);
   return {
     codigos: codigos.length,
     rutas: rutas.length,
     config,
     fuelups: fuelups.length,
     mantenimiento: mantenimiento.length,
+    comidas: comidas.length,
   };
 }
 
