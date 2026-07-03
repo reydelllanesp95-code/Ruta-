@@ -8,7 +8,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes } from "../lib/parseRoutes.js";
 import { readRouteFiles } from "../lib/importFile.js";
@@ -23,11 +23,13 @@ import {
 import { loadConfig, saveConfig } from "../lib/config.js";
 import { effectiveMpg, makeFuelup } from "../lib/fuel.js";
 import { makeMaint } from "../lib/maintenance.js";
+import { makeMeal } from "../lib/meals.js";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
 import StatsCards from "./earnings/StatsCards.jsx";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
 import FuelupsPanel from "./earnings/FuelupsPanel.jsx";
 import MaintenancePanel from "./earnings/MaintenancePanel.jsx";
+import MealsPanel from "./earnings/MealsPanel.jsx";
 import WeeklySummary from "./earnings/WeeklySummary.jsx";
 import MonthlySummary from "./earnings/MonthlySummary.jsx";
 import RouteCard from "./earnings/RouteCard.jsx";
@@ -38,6 +40,7 @@ export default function Earnings() {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [fuelups, setFuelups] = useState([]);
   const [maints, setMaints] = useState([]);
+  const [meals, setMeals] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -50,17 +53,19 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt] = await Promise.all([
+      const [data, cfg, fu, mt, ml] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
+        storage.loadJSON(KEY_MEALS, []),
       ]);
       if (mounted) {
         setRoutes(Array.isArray(data) ? data : []);
         setConfig(cfg);
         setFuelups(Array.isArray(fu) ? fu : []);
         setMaints(Array.isArray(mt) ? mt : []);
+        setMeals(Array.isArray(ml) ? ml : []);
         setLoaded(true);
       }
     })();
@@ -114,6 +119,15 @@ export default function Earnings() {
   // Botón MANUAL: solo si el usuario lo toca, copia el histórico a la config.
   const applyMaintCostPerMile = (value) =>
     onSaveConfig({ ...config, maintenance_cost_per_mile: value });
+
+  function persistMeals(next) {
+    setMeals(next);
+    storage.saveJSON(KEY_MEALS, next).catch((err) =>
+      setMsg({ tipo: "error", texto: "No se pudo guardar la comida: " + (err.message || err) })
+    );
+  }
+  const addMeal = (input) => persistMeals([...meals, makeMeal(input)]);
+  const deleteMeal = (id) => persistMeals(meals.filter((m) => m.id !== id));
 
   // MPG efectivo: DERIVADO en memoria, NUNCA se persiste. [ajuste 2]
   // Si hay >=2 llenados válidos usa el MPG real; si no, el asumido de config.
@@ -218,16 +232,18 @@ export default function Earnings() {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt] = await Promise.all([
+      const [data, cfg, fu, mt, ml] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
+        storage.loadJSON(KEY_MEALS, []),
       ]);
       setRoutes(Array.isArray(data) ? data : []);
       setConfig(cfg);
       setFuelups(Array.isArray(fu) ? fu : []);
       setMaints(Array.isArray(mt) ? mt : []);
+      setMeals(Array.isArray(ml) ? ml : []);
       setMsg({ tipo: "ok", texto: `Respaldo restaurado: ${res.rutas} rutas, ${res.codigos} códigos.` });
     } catch (err) {
       setMsg({ tipo: "error", texto: err.message || String(err) });
@@ -310,6 +326,19 @@ export default function Earnings() {
           onAdd={addMaint}
           onDelete={deleteMaint}
           onApplyCostPerMile={applyMaintCostPerMile}
+        />
+
+        <MealsPanel
+          meals={meals}
+          weekStartDow={config.pay_week_start_day}
+          semanaLabel={semanaInfo.label}
+          semanaNet={semanaInfo.totals.net_profit}
+          semanaKey={semanaInfo.totals.key}
+          mesLabel={mesInfo.label}
+          mesNet={mesInfo.totals.net_profit}
+          mesKey={mesInfo.totals.key}
+          onAdd={addMeal}
+          onDelete={deleteMeal}
         />
 
         <div className="grid grid-cols-2 gap-2">
