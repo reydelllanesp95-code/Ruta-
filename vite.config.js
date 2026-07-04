@@ -11,6 +11,15 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
+      // El nuevo service worker toma control de inmediato (sin esperar a que se
+      // cierren todas las pestañas) y limpia cachés viejas → el build nuevo
+      // reemplaza al viejo en la PWA instalada, evitando quedarse con una versión
+      // vieja pegada en el teléfono.
+      workbox: {
+        clientsClaim: true,
+        skipWaiting: true,
+        cleanupOutdatedCaches: true,
+      },
       manifest: {
         name: "Ruta · OnTrac",
         short_name: "Ruta",
