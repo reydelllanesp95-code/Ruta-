@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { KeyRound, TrendingUp } from "lucide-react";
 import { T } from "./lib/theme.js";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import GateCodeDirectory from "./components/GateCodeDirectory.jsx";
 import Earnings from "./components/Earnings.jsx";
 
@@ -16,10 +17,14 @@ export default function App() {
     <div className="min-h-screen" style={{ backgroundColor: T.bg }}>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <div style={{ display: tab === "codigos" ? "block" : "none" }}>
-        <GateCodeDirectory />
+        <ErrorBoundary>
+          <GateCodeDirectory />
+        </ErrorBoundary>
       </div>
       <div style={{ display: tab === "ganancias" ? "block" : "none" }}>
-        <Earnings />
+        <ErrorBoundary>
+          <Earnings />
+        </ErrorBoundary>
       </div>
 
       {/* Navegación inferior */}

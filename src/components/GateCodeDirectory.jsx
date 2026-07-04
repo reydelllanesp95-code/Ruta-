@@ -29,7 +29,9 @@ const STATUS = {
 const SEED = [];
 
 const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
-function normalize(str) {
+// Exportada para test de regresión: debe tolerar null/undefined/"" sin romper
+// (la nota puede quedar vacía al editarla).
+export function normalize(str) {
   return (str || "").normalize("NFD").replace(DIACRITICS, "").toLowerCase();
 }
 
@@ -175,13 +177,15 @@ export default function GateCodeDirectory() {
   function startEdit(entry) {
     setEditingId(entry.id);
     setAddingNew(false);
+    // `?? ""` garantiza strings aunque un código importado no traiga el campo
+    // (evita inputs no controlados que en iOS pueden dar comportamiento raro).
     setDraft({
-      name: entry.name,
-      code: entry.code,
-      note: entry.note,
-      status: entry.status,
-      zip: entry.zip || "",
-      city: entry.city || "",
+      name: entry.name ?? "",
+      code: entry.code ?? "",
+      note: entry.note ?? "",
+      status: entry.status ?? "ok",
+      zip: entry.zip ?? "",
+      city: entry.city ?? "",
     });
   }
 
@@ -495,8 +499,8 @@ function EditCard({ draft, setDraft, onSave, onCancel, onDelete, isNew }) {
           Comunidad
         </label>
         <input
-          value={draft.name}
-          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          value={draft.name ?? ""}
+          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value ?? "" }))}
           placeholder="Nombre del residencial"
           className="w-full mt-1 rounded-lg px-3 py-2 text-[14.5px] outline-none"
           style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
@@ -508,8 +512,8 @@ function EditCard({ draft, setDraft, onSave, onCancel, onDelete, isNew }) {
           Código
         </label>
         <input
-          value={draft.code}
-          onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value }))}
+          value={draft.code ?? ""}
+          onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value ?? "" }))}
           placeholder="Ej. #2366"
           className="gc-code w-full mt-1 rounded-lg px-3 py-2 text-[14.5px] outline-none"
           style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.red}` }}
@@ -522,8 +526,8 @@ function EditCard({ draft, setDraft, onSave, onCancel, onDelete, isNew }) {
             Zipcode
           </label>
           <input
-            value={draft.zip}
-            onChange={(e) => setDraft((d) => ({ ...d, zip: e.target.value }))}
+            value={draft.zip ?? ""}
+            onChange={(e) => setDraft((d) => ({ ...d, zip: e.target.value ?? "" }))}
             placeholder="Ej. 32714"
             className="gc-code w-full mt-1 rounded-lg px-3 py-2 text-[13.5px] outline-none"
             style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
@@ -534,8 +538,8 @@ function EditCard({ draft, setDraft, onSave, onCancel, onDelete, isNew }) {
             Ciudad
           </label>
           <input
-            value={draft.city}
-            onChange={(e) => setDraft((d) => ({ ...d, city: e.target.value }))}
+            value={draft.city ?? ""}
+            onChange={(e) => setDraft((d) => ({ ...d, city: e.target.value ?? "" }))}
             placeholder="Ej. Altamonte Springs, FL"
             className="w-full mt-1 rounded-lg px-3 py-2 text-[13.5px] outline-none"
             style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
@@ -548,8 +552,8 @@ function EditCard({ draft, setDraft, onSave, onCancel, onDelete, isNew }) {
           Nota (opcional)
         </label>
         <textarea
-          value={draft.note}
-          onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
+          value={draft.note ?? ""}
+          onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value ?? "" }))}
           placeholder="Ej. tocar dos veces, locker, zona…"
           rows={2}
           className="w-full mt-1 rounded-lg px-3 py-2 text-[13.5px] outline-none resize-none"
