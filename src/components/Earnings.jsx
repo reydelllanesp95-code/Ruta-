@@ -25,6 +25,7 @@ import { effectiveMpg, makeFuelup } from "../lib/fuel.js";
 import { makeMaint } from "../lib/maintenance.js";
 import { makeMeal } from "../lib/meals.js";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
+import { markBackedUp } from "../lib/backupMeta.js";
 import StatsCards from "./earnings/StatsCards.jsx";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
 import FuelupsPanel from "./earnings/FuelupsPanel.jsx";
@@ -218,7 +219,8 @@ export default function Earnings() {
   async function onExport() {
     try {
       await downloadBackup();
-      setMsg({ tipo: "ok", texto: "Respaldo descargado." });
+      await markBackedUp(); // marca respaldado → oculta el recordatorio
+      setMsg({ tipo: "ok", texto: "Respaldo descargado y marcado." });
     } catch (err) {
       setMsg({ tipo: "error", texto: "No se pudo exportar: " + (err.message || err) });
     }

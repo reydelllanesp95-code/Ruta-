@@ -14,6 +14,7 @@ export const KEY_CONFIG = "ruta_config_v1"; // configuración global (gas/mpg/ma
 export const KEY_FUELUPS = "ruta_fuelups_v1"; // historial de llenados de gasolina
 export const KEY_MAINT = "ruta_maint_v1"; // historial de mantenimiento
 export const KEY_MEALS = "ruta_meals_v1"; // gastos de comida del día de trabajo
+export const KEY_META = "ruta_meta_v1"; // meta de respaldo (último respaldo + firma)
 
 // Tipos de mantenimiento (reutilizable en UI y validación).
 export const MAINT_TYPES = ["oil", "tires", "brakes", "repair"];
