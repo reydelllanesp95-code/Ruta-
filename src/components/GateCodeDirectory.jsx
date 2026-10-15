@@ -260,7 +260,7 @@ export default function GateCodeDirectory() {
         className="sticky top-0 z-10 px-4 pt-4 pb-3"
         style={{ backgroundColor: T.bg, borderBottom: `1px solid ${T.border}` }}
       >
-        {/* Brand mark — colors inspired by OnTrac (black + red), not a reproduction of their logo */}
+        {/* Marca de la app (negro + rojo) */}
         <div className="flex items-center gap-2.5 mb-3">
           <div
             className="flex items-center justify-center rounded-md"
@@ -270,11 +270,11 @@ export default function GateCodeDirectory() {
           </div>
           <div className="leading-tight">
             <div className="gc-wordmark text-[15px]">
-              <span style={{ color: T.textPrimary }}>ON</span>
-              <span style={{ color: T.red }}>TRAC</span>
+              <span style={{ color: T.textPrimary }}>RU</span>
+              <span style={{ color: T.red }}>TA</span>
             </div>
             <div className="gc-eyebrow text-[10px] uppercase" style={{ color: T.textFaint }}>
-              Códigos de acceso · ruta
+              Códigos de acceso
             </div>
           </div>
         </div>
