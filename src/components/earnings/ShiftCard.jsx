@@ -10,8 +10,18 @@ import ShiftForm from "./ShiftForm.jsx";
 export default function ShiftCard({ route, config, onSave, onDelete }) {
   const [editing, setEditing] = useState(false);
   const eco = routeEconomics(route, config);
-  const horas = Number(route.horas) > 0 ? Number(route.horas) : null;
+  const horasBloque = Number(route.horas) > 0 ? Number(route.horas) : null;
+  const horasReales = Number(route.horasReales) > 0 ? Number(route.horasReales) : null;
+  // $/hora con horas reales (puerta a puerta) si existen; si no, las del bloque.
+  const horas = horasReales || horasBloque;
   const porHora = horas ? eco.net_profit / horas : null;
+  const tramo = [
+    route.salidaCasa && `casa ${route.salidaCasa}`,
+    horasBloque && `bloque ${route.horaInicio}–${route.horaFin}`,
+    route.llegadaCasa && `casa ${route.llegadaCasa}`,
+  ]
+    .filter(Boolean)
+    .join(" → ");
 
   return (
     <div className="rounded-xl p-3" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
@@ -30,12 +40,22 @@ export default function ShiftCard({ route, config, onSave, onDelete }) {
           </div>
           <div className="flex items-center gap-3 text-[12.5px] mt-1" style={{ color: T.textSecondary }}>
             <span className="flex items-center gap-1">
-              <Clock size={12} /> {horas ? `${route.horaInicio}–${route.horaFin} · ${horas} h` : "sin horas"}
+              <Clock size={12} />{" "}
+              {horas
+                ? horasReales
+                  ? `${horasReales} h reales${horasBloque ? ` (${horasBloque} h bloque)` : ""}`
+                  : `${horasBloque} h`
+                : "sin horas"}
             </span>
             <span className="flex items-center gap-1">
               <Navigation size={12} /> {route.millas} mi · {vehicleLabel(vehicleOf(route)).split(" ")[1]}
             </span>
           </div>
+          {tramo && (
+            <div className="text-[11.5px] mt-0.5" style={{ color: T.textFaint }}>
+              {tramo}
+            </div>
+          )}
           {route.propina > 0 && (
             <div className="flex items-center gap-1 text-[12px] mt-0.5" style={{ color: T.textFaint }}>
               <HandCoins size={12} /> {formatMoney(route.pagoBase)} pago + {formatMoney(route.propina)} propina

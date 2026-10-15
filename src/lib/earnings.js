@@ -297,7 +297,8 @@ function addRoute(acc, r, eco) {
   acc.maintenance_est = round2(acc.maintenance_est + eco.maintenance_est);
   acc.net_profit = round2(acc.net_profit + eco.net_profit);
   acc.propinas = round2(acc.propinas + (Number(r.propina) || 0));
-  const h = Number(r.horas);
+  // Horas reales (salida→llegada a casa) si existen; si no, las del bloque.
+  const h = Number(r.horasReales) > 0 ? Number(r.horasReales) : Number(r.horas);
   if (Number.isFinite(h) && h > 0) {
     acc.horas = round2(acc.horas + h);
     acc.net_con_horas = round2(acc.net_con_horas + eco.net_profit);

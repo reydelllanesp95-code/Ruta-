@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { parseCSV, dropEmptyRows, normalizeHeader } from "../csv.js";
-import { parseShiftRows, isShiftsCSVHeader, SHIFT_CSV_HEADER } from "../platforms.js";
+import { parseShiftRows, isShiftsCSVHeader } from "../platforms.js";
 
 const rowsOf = (t) => dropEmptyRows(parseCSV(t));
 
+// Filas en el orden de la plantilla original (sin salida/llegada).
 const CSV = [
-  SHIFT_CSV_HEADER,
+  "plataforma,fecha,inicio,fin,pago,propina,millas,vehiculo,nota",
   "Amazon Flex,2026-10-13,08:00,12:00,$90,,40,Hyundai,bloque mañana",
   "spark,10/14/2026,17:00,19:30,31.50,12,22,kia,",
   "uber,2026-10-14,,,10,,,,",
