@@ -9,7 +9,7 @@ import {
   Plus,
 } from "lucide-react";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes } from "../lib/parseRoutes.js";
 import { readRouteFiles } from "../lib/importFile.js";
@@ -25,7 +25,9 @@ import { loadConfig, saveConfig } from "../lib/config.js";
 import { makeFuelup } from "../lib/fuel.js";
 import { vehicleConfigs, vehicleOf, vehicleLabel, VEHICLE_IDS, VEHICLES } from "../lib/vehicles.js";
 import { makeMaint } from "../lib/maintenance.js";
-import { makeMeal } from "../lib/meals.js";
+import { makeMeal, mealSpendForKey } from "../lib/meals.js";
+import { makeToll, tollSpendForKey } from "../lib/tolls.js";
+import TollsPanel from "./earnings/TollsPanel.jsx";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
 import StatsCards from "./earnings/StatsCards.jsx";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
@@ -47,6 +49,7 @@ export default function Earnings() {
   const [fuelups, setFuelups] = useState([]);
   const [maints, setMaints] = useState([]);
   const [meals, setMeals] = useState([]);
+  const [tolls, setTolls] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -60,14 +63,16 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt, ml] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
         storage.loadJSON(KEY_MEALS, []),
+        storage.loadJSON(KEY_TOLLS, []),
       ]);
       if (mounted) {
+        setTolls(Array.isArray(tl) ? tl : []);
         setRoutes(Array.isArray(data) ? data : []);
         setConfig(cfg);
         setFuelups(Array.isArray(fu) ? fu : []);
@@ -135,6 +140,16 @@ export default function Earnings() {
   }
   const addMeal = (input) => persistMeals([...meals, makeMeal(input)]);
   const deleteMeal = (id) => persistMeals(meals.filter((m) => m.id !== id));
+
+  function persistTolls(next) {
+    setTolls(next);
+    storage.saveJSON(KEY_TOLLS, next).catch((err) =>
+      setMsg({ tipo: "error", texto: "No se pudo guardar el peaje: " + (err.message || err) })
+    );
+  }
+  const addToll = (input) => persistTolls([...tolls, makeToll(input)]);
+  const importTolls = (list) => list.length && persistTolls([...tolls, ...list]);
+  const deleteToll = (id) => persistTolls(tolls.filter((t) => t.id !== id));
 
   // Config de costos POR VEHÍCULO: MPG real con sus propios llenados (o el
   // asumido) y su mantenimiento/milla. DERIVADO, nunca se persiste. [ajuste 2]
@@ -274,13 +289,15 @@ export default function Earnings() {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt, ml] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
         storage.loadJSON(KEY_MEALS, []),
+        storage.loadJSON(KEY_TOLLS, []),
       ]);
+      setTolls(Array.isArray(tl) ? tl : []);
       setRoutes(Array.isArray(data) ? data : []);
       setConfig(cfg);
       setFuelups(Array.isArray(fu) ? fu : []);
@@ -339,6 +356,14 @@ export default function Earnings() {
         <StatsCards
           semana={semanaInfo.totals}
           mes={mesInfo.totals}
+          gastosSemana={
+            mealSpendForKey(meals, semanaInfo.totals.key, config.pay_week_start_day) +
+            tollSpendForKey(tolls, semanaInfo.totals.key, config.pay_week_start_day)
+          }
+          gastosMes={
+            mealSpendForKey(meals, mesInfo.totals.key, config.pay_week_start_day) +
+            tollSpendForKey(tolls, mesInfo.totals.key, config.pay_week_start_day)
+          }
           semanaLabel={semanaInfo.label}
           mesLabel={mesInfo.label}
         />
@@ -402,6 +427,14 @@ export default function Earnings() {
           mesKey={mesInfo.totals.key}
           onAdd={addMeal}
           onDelete={deleteMeal}
+        />
+
+        <TollsPanel
+          tolls={tolls}
+          weekStartDow={config.pay_week_start_day}
+          onAdd={addToll}
+          onImport={importTolls}
+          onDelete={deleteToll}
         />
 
         <div className="grid grid-cols-2 gap-2">
