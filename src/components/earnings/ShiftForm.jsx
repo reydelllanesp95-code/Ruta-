@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Save, X, Trash2 } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO } from "../../lib/earnings.js";
 import { ACTIVE_PLATFORMS, platformLabel, validateShift, hoursBetween } from "../../lib/platforms.js";
 import VehiclePicker from "./VehiclePicker.jsx";
+import { loadDraft, saveDraft, clearDraft, nowHHMM } from "../../lib/shiftDraft.js";
 
 const inputStyle = { backgroundColor: T.surfaceRaised, color: T.textPrimary, border: `1px solid ${T.border}` };
 
@@ -20,15 +21,18 @@ function Field({ label, children }) {
 
 // Formulario de turno (Flex / Spark / Otro). Sirve para crear y para editar.
 // `defaultVehicle`: el último vehículo usado, para no tener que elegirlo cada vez.
+// `persistDraft`: (solo turno NUEVO) guarda cada cambio en el teléfono y lo
+// recupera al reabrir, porque el iPhone cierra la app minimizada.
 export default function ShiftForm({
   initial,
   defaultVehicle = "kia",
+  persistDraft = false,
   onSubmit,
   onCancel,
   onDelete,
   submitLabel = "Guardar turno",
 }) {
-  const i = initial || {};
+  const [i] = useState(() => initial || (persistDraft && loadDraft()) || {});
   const [vehiculo, setVehiculo] = useState(i.vehiculo || defaultVehicle);
   const [odoInicio, setOdoInicio] = useState(i.odoInicio != null ? String(i.odoInicio) : "");
   const [odoFin, setOdoFin] = useState(i.odoFin != null ? String(i.odoFin) : "");
@@ -43,6 +47,44 @@ export default function ShiftForm({
   const [propina, setPropina] = useState(i.propina ? String(i.propina) : "");
   const [nota, setNota] = useState(i.nota || "");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!persistDraft) return;
+    saveDraft({
+      plataforma, vehiculo, fecha, salidaCasa, horaInicio, horaFin, llegadaCasa,
+      odoInicio, odoFin, millas, pago, propina, nota,
+    });
+  }, [persistDraft, plataforma, vehiculo, fecha, salidaCasa, horaInicio, horaFin, llegadaCasa,
+    odoInicio, odoFin, millas, pago, propina, nota]);
+
+  function discard() {
+    if (!confirm("¿Borrar lo que llevas apuntado de este turno?")) return;
+    clearDraft();
+    onCancel && onCancel();
+  }
+
+  // Campo de hora con botón "Ahora" (pone la hora actual de un toque).
+  const timeField = (label, value, set) => (
+    <Field label={label}>
+      <div className="flex gap-1.5 mt-1">
+        <input
+          type="time"
+          value={value}
+          onChange={(e) => set(e.target.value)}
+          className="gc-code flex-1 min-w-0 rounded-lg px-2 py-2 text-[14px] outline-none"
+          style={inputStyle}
+        />
+        <button
+          type="button"
+          onClick={() => set(nowHHMM())}
+          className="rounded-lg px-2 text-[11.5px] shrink-0"
+          style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
+        >
+          Ahora
+        </button>
+      </div>
+    </Field>
+  );
 
   const horas = hoursBetween(horaInicio, horaFin);
   const horasReales = hoursBetween(salidaCasa, llegadaCasa);
@@ -113,10 +155,10 @@ export default function ShiftForm({
       <Field label="Fecha">{input(fecha, setFecha, { type: "date" })}</Field>
 
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Salí de casa">{input(salidaCasa, setSalidaCasa, { type: "time" })}</Field>
-        <Field label="Inicio bloque">{input(horaInicio, setHoraInicio, { type: "time" })}</Field>
-        <Field label="Fin bloque">{input(horaFin, setHoraFin, { type: "time" })}</Field>
-        <Field label="Llegué a casa">{input(llegadaCasa, setLlegadaCasa, { type: "time" })}</Field>
+        {timeField("Salí de casa", salidaCasa, setSalidaCasa)}
+        {timeField("Inicio bloque", horaInicio, setHoraInicio)}
+        {timeField("Fin bloque", horaFin, setHoraFin)}
+        {timeField("Llegué a casa", llegadaCasa, setLlegadaCasa)}
       </div>
       <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
         {horasReales != null
@@ -182,6 +224,14 @@ export default function ShiftForm({
           </button>
         )}
       </div>
+      {persistDraft && (
+        <div className="flex items-center justify-between text-[11.5px]" style={{ color: T.textFaint }}>
+          <span>Se guarda solo mientras escribes.</span>
+          <button type="button" onClick={discard} style={{ color: T.red }}>
+            Descartar borrador
+          </button>
+        </div>
+      )}
     </div>
   );
 }
