@@ -7,7 +7,9 @@ import {
   FileSpreadsheet,
   TrendingUp,
   Plus,
+  RefreshCw,
 } from "lucide-react";
+import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { T } from "../lib/theme.js";
 import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
@@ -359,6 +361,21 @@ export default function Earnings() {
         style={{ backgroundColor: T.bg, borderBottom: `1px solid ${T.border}` }}
       >
         <div className="flex items-center gap-2.5 mb-1">
+          <button
+            onClick={updateAndReload}
+            className="order-last ml-auto flex flex-col items-end text-[11px]"
+            style={{ color: T.textFaint }}
+            aria-label="Buscar actualización y recargar"
+          >
+            <span className="flex items-center gap-1" style={{ color: T.textSecondary }}>
+              <RefreshCw size={14} /> Actualizar
+            </span>
+            {BUILD_TIME && (
+              <span className="gc-code text-[9.5px]">
+                v {new Date(BUILD_TIME).toLocaleString("es-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+          </button>
           <div
             className="flex items-center justify-center rounded-md"
             style={{ width: 30, height: 30, backgroundColor: "#000", border: `1px solid ${T.border}` }}

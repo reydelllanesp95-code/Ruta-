@@ -6,6 +6,8 @@ import { VitePWA } from "vite-plugin-pwa";
 // sin internet (PWA). El service worker cachea el shell de la app.
 export default defineConfig({
   base: "./",
+  // Hora del build, visible junto al botón "Actualizar" para saber qué versión se ve.
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   plugins: [
     react(),
     VitePWA({
@@ -21,10 +23,10 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
       },
       manifest: {
-        name: "Ruta · OnTrac",
+        name: "Ruta",
         short_name: "Ruta",
         description:
-          "Códigos de acceso de la ruta y seguimiento de ganancias para OnTrac",
+          "Ganancias de reparto (Amazon Flex, Spark Driver) y códigos de acceso",
         lang: "es",
         theme_color: "#0A0A0B",
         background_color: "#0A0A0B",
