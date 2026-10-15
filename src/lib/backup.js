@@ -3,6 +3,7 @@
 import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { loadConfig, saveConfig } from "./config.js";
+import { SHIFT_CSV_HEADER } from "./platforms.js";
 
 const BACKUP_TYPE = "ruta-backup";
 
@@ -78,17 +79,10 @@ export async function restoreBackup(jsonText) {
   };
 }
 
-// Genera y descarga un CSV de plantilla manual desde la app.
-export function downloadPlantillaCSV() {
-  const hoy = new Date().toISOString().slice(0, 10);
-  const csv = [
-    "fecha,parada,direccion,paquetes",
-    `${hoy},Eden Park,1200 Eden Park Dr,3`,
-    `${hoy},Los Altos,500 Los Altos Way,2`,
-    `${hoy},Casa del Sol,75 Sol Ct,1`,
-  ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  triggerDownload(blob, "ruta-plantilla.csv");
+// Plantilla de turnos (Flex/Spark).
+export function downloadPlantillaTurnos() {
+  // Solo encabezado: una fila de ejemplo se importaría como un turno real.
+  triggerDownload(new Blob([SHIFT_CSV_HEADER + "\n"], { type: "text/csv" }), "ruta-plantilla-turnos.csv");
 }
 
 function triggerDownload(blob, filename) {

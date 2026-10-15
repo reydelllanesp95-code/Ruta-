@@ -159,3 +159,71 @@ export function shiftUpdate(input) {
 export function isShift(route) {
   return Boolean(route && route.tipo === "turno");
 }
+
+// ---- Importar turnos desde CSV (plantilla) ----
+// Columnas: plataforma,fecha,inicio,fin,pago,propina,millas,vehiculo,nota
+// Pensado para el flujo foto del resumen → Claude → CSV → RUTA.
+
+const PLATFORM_ALIASES = {
+  flex: "flex", "amazon flex": "flex", amazon: "flex",
+  spark: "spark", "spark driver": "spark", walmart: "spark",
+  otro: "otro", other: "otro",
+};
+const VEHICLE_ALIASES = { kia: "kia", sorento: "kia", "kia sorento": "kia", tucson: "tucson", hyundai: "tucson", "hyundai tucson": "tucson" };
+
+export const SHIFT_CSV_HEADER = "plataforma,fecha,inicio,fin,pago,propina,millas,vehiculo,nota";
+
+export function isShiftsCSVHeader(normHeader) {
+  return normHeader.includes("plataforma") && normHeader.includes("pago");
+}
+
+// Clave para no importar dos veces el mismo turno.
+function shiftDupKey(s) {
+  return [s.plataforma, s.fecha, s.horaInicio || "", round2(s.ganancia)].join("|");
+}
+
+// rows: filas ya parseadas (la 0 es el encabezado). Devuelve
+// { shifts, omitidas: [{ fila, motivo }], duplicados }.
+export function parseShiftRows(rows, existentes = []) {
+  const header = rows[0].map((h) => String(h).trim().toLowerCase());
+  const idx = (name) => header.indexOf(name);
+  const get = (row, name) => {
+    const i = idx(name);
+    return i < 0 || i >= row.length ? "" : String(row[i] == null ? "" : row[i]).trim();
+  };
+  const vistas = new Set((existentes || []).filter(isShift).map(shiftDupKey));
+  const shifts = [];
+  const omitidas = [];
+  let duplicados = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const fila = i + 1;
+    const platRaw = get(row, "plataforma").toLowerCase();
+    const vehRaw = get(row, "vehiculo").toLowerCase();
+    const input = {
+      plataforma: PLATFORM_ALIASES[platRaw] || platRaw,
+      fecha: get(row, "fecha"),
+      horaInicio: get(row, "inicio"),
+      horaFin: get(row, "fin"),
+      pago: get(row, "pago").replace(/[$,]/g, ""),
+      propina: get(row, "propina").replace(/[$,]/g, ""),
+      millas: get(row, "millas"),
+      vehiculo: vehRaw ? VEHICLE_ALIASES[vehRaw] || vehRaw : DEFAULT_VEHICLE,
+      nota: get(row, "nota"),
+    };
+    const chk = validateShift(input);
+    if (!chk.ok) {
+      omitidas.push({ fila, motivo: chk.error });
+      continue;
+    }
+    const s = makeShift(input);
+    const k = shiftDupKey(s);
+    if (vistas.has(k)) {
+      duplicados += 1;
+      continue;
+    }
+    vistas.add(k);
+    shifts.push(s);
+  }
+  return { shifts, omitidas, duplicados };
+}

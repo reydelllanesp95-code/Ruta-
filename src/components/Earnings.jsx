@@ -11,7 +11,8 @@ import {
 import { T } from "../lib/theme.js";
 import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
-import { parseRoutes } from "../lib/parseRoutes.js";
+import { parseRoutes, parseCSV, normalizeHeader } from "../lib/parseRoutes.js";
+import { dropEmptyRows } from "../lib/csv.js";
 import { readRouteFiles } from "../lib/importFile.js";
 import {
   aggregate,
@@ -28,7 +29,7 @@ import { makeMaint } from "../lib/maintenance.js";
 import { makeMeal, mealSpendForKey } from "../lib/meals.js";
 import { makeToll, tollSpendForKey } from "../lib/tolls.js";
 import TollsPanel from "./earnings/TollsPanel.jsx";
-import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
+import { downloadBackup, restoreBackup, downloadPlantillaTurnos } from "../lib/backup.js";
 import StatsCards from "./earnings/StatsCards.jsx";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
 import FuelupsPanel from "./earnings/FuelupsPanel.jsx";
@@ -41,7 +42,14 @@ import ImportDialog from "./earnings/ImportDialog.jsx";
 import ShiftForm from "./earnings/ShiftForm.jsx";
 import ShiftCard from "./earnings/ShiftCard.jsx";
 import PlatformSummary from "./earnings/PlatformSummary.jsx";
-import { makeShift, shiftUpdate, platformOf, isShift } from "../lib/platforms.js";
+import {
+  makeShift,
+  shiftUpdate,
+  platformOf,
+  isShift,
+  isShiftsCSVHeader,
+  parseShiftRows,
+} from "../lib/platforms.js";
 
 export default function Earnings() {
   const [routes, setRoutes] = useState([]);
@@ -205,6 +213,23 @@ export default function Earnings() {
     try {
       // Un .zip puede traer varios manifests (uno por día). Los leemos todos.
       const items = await readRouteFiles(file);
+      // Plantilla de turnos (Flex/Spark): se importa directo, sin el diálogo de rutas.
+      const first = items.length === 1 ? dropEmptyRows(parseCSV(items[0].text)) : [];
+      if (first.length > 1 && isShiftsCSVHeader(first[0].map(normalizeHeader))) {
+        const res = parseShiftRows(first, routes);
+        if (res.shifts.length) persist([...routes, ...res.shifts]);
+        const partes = [`Importados ${res.shifts.length} turno(s).`];
+        if (res.duplicados) partes.push(`${res.duplicados} ya estaban.`);
+        if (res.omitidas.length) {
+          partes.push(
+            `${res.omitidas.length} fila(s) omitidas: ` +
+              res.omitidas.slice(0, 3).map((o) => `fila ${o.fila} (${o.motivo})`).join("; ") +
+              (res.omitidas.length > 3 ? "…" : "")
+          );
+        }
+        setMsg({ tipo: res.shifts.length ? "ok" : "error", texto: partes.join(" ") });
+        return;
+      }
       let all = [];
       const omitidos = [];
       for (const { text, filename } of items) {
@@ -443,10 +468,10 @@ export default function Earnings() {
             className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
             style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
           >
-            <Upload size={15} /> Importar CSV OnTrac
+            <Upload size={15} /> Importar CSV
           </button>
           <button
-            onClick={downloadPlantillaCSV}
+            onClick={downloadPlantillaTurnos}
             className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
             style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
           >
