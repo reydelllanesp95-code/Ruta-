@@ -47,3 +47,16 @@ Escritos antes de implementar (15-oct-2026). No se cambian tras ver resultados.
 ## Verificación
 12. `npm test` en verde (92 previos + nuevos), `npm run build` OK, prueba de pantalla simulada (jsdom, temporal) del flujo de vehículo y peaje.
 13. No se publica en `main` sin OK explícito de Rey.
+
+---
+
+# Fase C: salida y llegada a casa (horas reales puerta a puerta)
+
+Escritos antes de implementar (15-oct-2026). No se cambian tras ver resultados.
+
+1. El turno admite, opcionales, hora de **salida de casa** y de **llegada a casa** (HH:MM). Las dos o ninguna; una sola → error claro.
+2. `horasReales` = de salida a llegada (si llegada < salida, cruza medianoche). Si el turno también tiene horas de bloque, las horas reales deben ser ≥ las del bloque; si no → error claro.
+3. El **neto/hora** usa las horas reales cuando existen; si no, las del bloque. Turnos guardados antes (sin estos campos) dan exactamente el mismo neto/hora que antes (test).
+4. La tarjeta del turno muestra salida → bloque → llegada, las horas reales y las del bloque. Las tarjetas de semana/mes muestran las horas reales.
+5. Importar CSV: columnas opcionales `salida,llegada`; un CSV con la plantilla anterior (sin ellas) sigue importando igual (test).
+6. `npm test` en verde (114 previos + nuevos) y `npm run build` OK.
