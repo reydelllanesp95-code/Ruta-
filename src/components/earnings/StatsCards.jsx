@@ -1,5 +1,5 @@
 import React from "react";
-import { DollarSign, Package, MapPin, Navigation } from "lucide-react";
+import { DollarSign, Package, MapPin, Navigation, Clock } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney } from "../../lib/earnings.js";
 
@@ -19,12 +19,21 @@ function Card({ title, totals }) {
         </span>
       </div>
       <div className="flex items-center gap-3 text-[12px]" style={{ color: T.textSecondary }}>
-        <span className="flex items-center gap-1">
-          <Package size={12} /> {totals.paquetes}
-        </span>
-        <span className="flex items-center gap-1">
-          <MapPin size={12} /> {totals.paradas}
-        </span>
+        {totals.paquetes > 0 && (
+          <>
+            <span className="flex items-center gap-1">
+              <Package size={12} /> {totals.paquetes}
+            </span>
+            <span className="flex items-center gap-1">
+              <MapPin size={12} /> {totals.paradas}
+            </span>
+          </>
+        )}
+        {totals.horas > 0 && (
+          <span className="flex items-center gap-1">
+            <Clock size={12} /> {totals.horas} h
+          </span>
+        )}
         <span className="flex items-center gap-1">
           <Navigation size={12} /> {totals.millas} mi
         </span>
@@ -43,6 +52,24 @@ function Card({ title, totals }) {
           {formatMoney(totals.net_profit)}
         </span>
       </div>
+      <div className="mt-1 flex items-baseline justify-between">
+        <span className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
+          Neto/hora
+        </span>
+        <span className="gc-code text-[13px]" style={{ color: T.textPrimary }}>
+          {totals.net_per_hour != null ? formatMoney(totals.net_per_hour) : "—"}
+        </span>
+      </div>
+      {totals.propinas > 0 && (
+        <div className="mt-1 flex items-baseline justify-between">
+          <span className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
+            Propinas
+          </span>
+          <span className="gc-code text-[13px]" style={{ color: T.textSecondary }}>
+            {formatMoney(totals.propinas)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

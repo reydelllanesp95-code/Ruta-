@@ -6,6 +6,7 @@ import {
   UploadCloud,
   FileSpreadsheet,
   TrendingUp,
+  Plus,
 } from "lucide-react";
 import { T } from "../lib/theme.js";
 import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, DEFAULT_CONFIG } from "../lib/constants.js";
@@ -34,6 +35,10 @@ import WeeklySummary from "./earnings/WeeklySummary.jsx";
 import MonthlySummary from "./earnings/MonthlySummary.jsx";
 import RouteCard from "./earnings/RouteCard.jsx";
 import ImportDialog from "./earnings/ImportDialog.jsx";
+import ShiftForm from "./earnings/ShiftForm.jsx";
+import ShiftCard from "./earnings/ShiftCard.jsx";
+import PlatformSummary from "./earnings/PlatformSummary.jsx";
+import { makeShift, shiftUpdate, platformOf, isShift } from "../lib/platforms.js";
 
 export default function Earnings() {
   const [routes, setRoutes] = useState([]);
@@ -45,6 +50,7 @@ export default function Earnings() {
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
   const [saveState, setSaveState] = useState("idle");
+  const [addingShift, setAddingShift] = useState(false);
 
   const fileRef = useRef(null);
   const backupRef = useRef(null);
@@ -135,7 +141,7 @@ export default function Earnings() {
   const effConfig = useMemo(() => ({ ...config, mpg: effInfo.mpg }), [config, effInfo.mpg]);
 
   // Agregaciones memoizadas: recalculan al cambiar rutas o el MPG efectivo. [Aud 16]
-  const agg = useMemo(() => aggregate(routes, effConfig), [routes, effConfig]);
+  const agg = useMemo(() => aggregate(routes, effConfig, platformOf), [routes, effConfig]);
 
   // Muestra el período ACTUAL; si está vacío, cae al más reciente con datos
   // (lista ya ordenada desc). Así "Este mes" no queda en $0 al iniciar el mes.
@@ -209,6 +215,24 @@ export default function Earnings() {
 
   function updateRoute(id, fields) {
     persist(routes.map((r) => (r.id === id ? { ...r, ...fields } : r)));
+  }
+
+  function addShift(input) {
+    try {
+      persist([...routes, makeShift(input)]);
+      setAddingShift(false);
+      setMsg({ tipo: "ok", texto: "Turno guardado." });
+    } catch (err) {
+      setMsg({ tipo: "error", texto: err.message || String(err) });
+    }
+  }
+
+  function editShift(id, input) {
+    try {
+      updateRoute(id, shiftUpdate(input));
+    } catch (err) {
+      setMsg({ tipo: "error", texto: err.message || String(err) });
+    }
   }
 
   function deleteRoute(id) {
@@ -287,7 +311,7 @@ export default function Earnings() {
             </div>
             <div className="gc-eyebrow text-[10px] uppercase" style={{ color: T.textFaint }}>
               {routes.length} ruta(s) ·{" "}
-              {saveState === "saving" ? "guardando…" : saveState === "saved" ? "guardado ✓" : "OnTrac"}
+              {saveState === "saving" ? "guardando…" : saveState === "saved" ? "guardado ✓" : "Flex · Spark"}
             </div>
           </div>
         </div>
@@ -300,6 +324,25 @@ export default function Earnings() {
           semanaLabel={semanaInfo.label}
           mesLabel={mesInfo.label}
         />
+
+        {addingShift ? (
+          <div className="rounded-xl p-3" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
+            <div className="gc-eyebrow text-[11px] uppercase mb-2" style={{ color: T.textFaint }}>
+              Nuevo turno
+            </div>
+            <ShiftForm onSubmit={addShift} onCancel={() => setAddingShift(false)} />
+          </div>
+        ) : (
+          <button
+            onClick={() => setAddingShift(true)}
+            className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-medium"
+            style={{ backgroundColor: T.red, color: "#fff" }}
+          >
+            <Plus size={17} /> Añadir turno
+          </button>
+        )}
+
+        <PlatformSummary items={agg.porGrupo} />
 
         <ConfigPanel config={config} onSave={onSaveConfig} />
 
@@ -344,10 +387,10 @@ export default function Earnings() {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[14px] font-medium"
-            style={{ backgroundColor: T.red, color: "#fff" }}
+            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
+            style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
           >
-            <Upload size={16} /> Importar ruta
+            <Upload size={15} /> Importar CSV OnTrac
           </button>
           <button
             onClick={downloadPlantillaCSV}
@@ -384,15 +427,24 @@ export default function Earnings() {
 
         <div>
           <div className="gc-eyebrow text-[11px] uppercase px-1 py-1.5" style={{ color: T.textFaint }}>
-            Rutas
+            Turnos y rutas
           </div>
           {routesOrdenadas.length === 0 ? (
             <div className="text-center py-8 text-[13.5px]" style={{ color: T.textFaint }}>
-              Aún no hay rutas. Toca "Importar ruta" y sube tu CSV de OnTrac.
+              Aún no hay registros. Toca "Añadir turno" para apuntar tu primer bloque.
             </div>
           ) : (
             <div className="space-y-2">
-              {routesOrdenadas.map((r) => (
+              {routesOrdenadas.map((r) =>
+                isShift(r) ? (
+                  <ShiftCard
+                    key={r.id}
+                    route={r}
+                    config={effConfig}
+                    onSave={(input) => editShift(r.id, input)}
+                    onDelete={deleteRoute}
+                  />
+                ) : (
                 <RouteCard
                   key={r.id}
                   route={r}
@@ -400,7 +452,8 @@ export default function Earnings() {
                   onSave={(fields) => updateRoute(r.id, fields)}
                   onDelete={deleteRoute}
                 />
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
