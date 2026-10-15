@@ -6,11 +6,13 @@ import {
   UploadCloud,
   FileSpreadsheet,
   TrendingUp,
+  Plus,
 } from "lucide-react";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
-import { parseRoutes } from "../lib/parseRoutes.js";
+import { parseRoutes, parseCSV, normalizeHeader } from "../lib/parseRoutes.js";
+import { dropEmptyRows } from "../lib/csv.js";
 import { readRouteFiles } from "../lib/importFile.js";
 import {
   aggregate,
@@ -21,10 +23,13 @@ import {
   monthLabel,
 } from "../lib/earnings.js";
 import { loadConfig, saveConfig } from "../lib/config.js";
-import { effectiveMpg, makeFuelup } from "../lib/fuel.js";
+import { makeFuelup } from "../lib/fuel.js";
+import { vehicleConfigs, vehicleOf, vehicleLabel, VEHICLE_IDS, VEHICLES } from "../lib/vehicles.js";
 import { makeMaint } from "../lib/maintenance.js";
-import { makeMeal } from "../lib/meals.js";
-import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
+import { makeMeal, mealSpendForKey } from "../lib/meals.js";
+import { makeToll, tollSpendForKey } from "../lib/tolls.js";
+import TollsPanel from "./earnings/TollsPanel.jsx";
+import { downloadBackup, restoreBackup, downloadPlantillaTurnos } from "../lib/backup.js";
 import StatsCards from "./earnings/StatsCards.jsx";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
 import FuelupsPanel from "./earnings/FuelupsPanel.jsx";
@@ -34,6 +39,17 @@ import WeeklySummary from "./earnings/WeeklySummary.jsx";
 import MonthlySummary from "./earnings/MonthlySummary.jsx";
 import RouteCard from "./earnings/RouteCard.jsx";
 import ImportDialog from "./earnings/ImportDialog.jsx";
+import ShiftForm from "./earnings/ShiftForm.jsx";
+import ShiftCard from "./earnings/ShiftCard.jsx";
+import PlatformSummary from "./earnings/PlatformSummary.jsx";
+import {
+  makeShift,
+  shiftUpdate,
+  platformOf,
+  isShift,
+  isShiftsCSVHeader,
+  parseShiftRows,
+} from "../lib/platforms.js";
 
 export default function Earnings() {
   const [routes, setRoutes] = useState([]);
@@ -41,10 +57,12 @@ export default function Earnings() {
   const [fuelups, setFuelups] = useState([]);
   const [maints, setMaints] = useState([]);
   const [meals, setMeals] = useState([]);
+  const [tolls, setTolls] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
   const [saveState, setSaveState] = useState("idle");
+  const [addingShift, setAddingShift] = useState(false);
 
   const fileRef = useRef(null);
   const backupRef = useRef(null);
@@ -53,14 +71,16 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt, ml] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
         storage.loadJSON(KEY_MEALS, []),
+        storage.loadJSON(KEY_TOLLS, []),
       ]);
       if (mounted) {
+        setTolls(Array.isArray(tl) ? tl : []);
         setRoutes(Array.isArray(data) ? data : []);
         setConfig(cfg);
         setFuelups(Array.isArray(fu) ? fu : []);
@@ -117,8 +137,8 @@ export default function Earnings() {
   const addMaint = (input) => persistMaints([...maints, makeMaint(input)]);
   const deleteMaint = (id) => persistMaints(maints.filter((m) => m.id !== id));
   // Botón MANUAL: solo si el usuario lo toca, copia el histórico a la config.
-  const applyMaintCostPerMile = (value) =>
-    onSaveConfig({ ...config, maintenance_cost_per_mile: value });
+  const applyMaintCostPerMile = (value, vehiculo = "kia") =>
+    onSaveConfig({ ...config, [VEHICLES[vehiculo].maintKey]: value });
 
   function persistMeals(next) {
     setMeals(next);
@@ -129,13 +149,30 @@ export default function Earnings() {
   const addMeal = (input) => persistMeals([...meals, makeMeal(input)]);
   const deleteMeal = (id) => persistMeals(meals.filter((m) => m.id !== id));
 
-  // MPG efectivo: DERIVADO en memoria, NUNCA se persiste. [ajuste 2]
-  // Si hay >=2 llenados válidos usa el MPG real; si no, el asumido de config.
-  const effInfo = useMemo(() => effectiveMpg(config, fuelups), [config, fuelups]);
-  const effConfig = useMemo(() => ({ ...config, mpg: effInfo.mpg }), [config, effInfo.mpg]);
+  function persistTolls(next) {
+    setTolls(next);
+    storage.saveJSON(KEY_TOLLS, next).catch((err) =>
+      setMsg({ tipo: "error", texto: "No se pudo guardar el peaje: " + (err.message || err) })
+    );
+  }
+  const addToll = (input) => persistTolls([...tolls, makeToll(input)]);
+  const importTolls = (list) => list.length && persistTolls([...tolls, ...list]);
+  const deleteToll = (id) => persistTolls(tolls.filter((t) => t.id !== id));
 
-  // Agregaciones memoizadas: recalculan al cambiar rutas o el MPG efectivo. [Aud 16]
-  const agg = useMemo(() => aggregate(routes, effConfig), [routes, effConfig]);
+  // Config de costos POR VEHÍCULO: MPG real con sus propios llenados (o el
+  // asumido) y su mantenimiento/milla. DERIVADO, nunca se persiste. [ajuste 2]
+  const vCfgs = useMemo(() => vehicleConfigs(config, fuelups), [config, fuelups]);
+  const configFor = useMemo(() => (r) => vCfgs[vehicleOf(r)].config, [vCfgs]);
+  const effByVehicle = useMemo(
+    () => Object.fromEntries(VEHICLE_IDS.map((id) => [id, vCfgs[id].effInfo])),
+    [vCfgs]
+  );
+
+  // Agregaciones memoizadas: recalculan al cambiar rutas o los costos. [Aud 16]
+  const agg = useMemo(
+    () => aggregate(routes, config, platformOf, configFor),
+    [routes, config, configFor]
+  );
 
   // Muestra el período ACTUAL; si está vacío, cae al más reciente con datos
   // (lista ya ordenada desc). Así "Este mes" no queda en $0 al iniciar el mes.
@@ -154,6 +191,16 @@ export default function Earnings() {
     const esActual = item.key === key;
     return { totals: item, label: esActual ? "Este mes" : monthLabel(item.key) };
   }, [agg]);
+  // Vehículo del turno más reciente: sale preseleccionado al añadir otro.
+  const lastVehicle = useMemo(() => {
+    const turnos = routes.filter(isShift);
+    if (!turnos.length) return "kia";
+    const last = turnos.reduce((a, b) =>
+      (a.fecha + (a.importadoEn || "")) >= (b.fecha + (b.importadoEn || "")) ? a : b
+    );
+    return vehicleOf(last);
+  }, [routes]);
+
   const routesOrdenadas = useMemo(
     () => [...routes].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
     [routes]
@@ -166,6 +213,23 @@ export default function Earnings() {
     try {
       // Un .zip puede traer varios manifests (uno por día). Los leemos todos.
       const items = await readRouteFiles(file);
+      // Plantilla de turnos (Flex/Spark): se importa directo, sin el diálogo de rutas.
+      const first = items.length === 1 ? dropEmptyRows(parseCSV(items[0].text)) : [];
+      if (first.length > 1 && isShiftsCSVHeader(first[0].map(normalizeHeader))) {
+        const res = parseShiftRows(first, routes);
+        if (res.shifts.length) persist([...routes, ...res.shifts]);
+        const partes = [`Importados ${res.shifts.length} turno(s).`];
+        if (res.duplicados) partes.push(`${res.duplicados} ya estaban.`);
+        if (res.omitidas.length) {
+          partes.push(
+            `${res.omitidas.length} fila(s) omitidas: ` +
+              res.omitidas.slice(0, 3).map((o) => `fila ${o.fila} (${o.motivo})`).join("; ") +
+              (res.omitidas.length > 3 ? "…" : "")
+          );
+        }
+        setMsg({ tipo: res.shifts.length ? "ok" : "error", texto: partes.join(" ") });
+        return;
+      }
       let all = [];
       const omitidos = [];
       for (const { text, filename } of items) {
@@ -211,6 +275,24 @@ export default function Earnings() {
     persist(routes.map((r) => (r.id === id ? { ...r, ...fields } : r)));
   }
 
+  function addShift(input) {
+    try {
+      persist([...routes, makeShift(input)]);
+      setAddingShift(false);
+      setMsg({ tipo: "ok", texto: "Turno guardado." });
+    } catch (err) {
+      setMsg({ tipo: "error", texto: err.message || String(err) });
+    }
+  }
+
+  function editShift(id, input) {
+    try {
+      updateRoute(id, shiftUpdate(input));
+    } catch (err) {
+      setMsg({ tipo: "error", texto: err.message || String(err) });
+    }
+  }
+
   function deleteRoute(id) {
     persist(routes.filter((r) => r.id !== id));
   }
@@ -232,13 +314,15 @@ export default function Earnings() {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt, ml] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
         storage.loadJSON(KEY_MEALS, []),
+        storage.loadJSON(KEY_TOLLS, []),
       ]);
+      setTolls(Array.isArray(tl) ? tl : []);
       setRoutes(Array.isArray(data) ? data : []);
       setConfig(cfg);
       setFuelups(Array.isArray(fu) ? fu : []);
@@ -287,7 +371,7 @@ export default function Earnings() {
             </div>
             <div className="gc-eyebrow text-[10px] uppercase" style={{ color: T.textFaint }}>
               {routes.length} ruta(s) ·{" "}
-              {saveState === "saving" ? "guardando…" : saveState === "saved" ? "guardado ✓" : "OnTrac"}
+              {saveState === "saving" ? "guardando…" : saveState === "saved" ? "guardado ✓" : "Flex · Spark"}
             </div>
           </div>
         </div>
@@ -297,25 +381,54 @@ export default function Earnings() {
         <StatsCards
           semana={semanaInfo.totals}
           mes={mesInfo.totals}
+          gastosSemana={
+            mealSpendForKey(meals, semanaInfo.totals.key, config.pay_week_start_day) +
+            tollSpendForKey(tolls, semanaInfo.totals.key, config.pay_week_start_day)
+          }
+          gastosMes={
+            mealSpendForKey(meals, mesInfo.totals.key, config.pay_week_start_day) +
+            tollSpendForKey(tolls, mesInfo.totals.key, config.pay_week_start_day)
+          }
           semanaLabel={semanaInfo.label}
           mesLabel={mesInfo.label}
         />
 
+        {addingShift ? (
+          <div className="rounded-xl p-3" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
+            <div className="gc-eyebrow text-[11px] uppercase mb-2" style={{ color: T.textFaint }}>
+              Nuevo turno
+            </div>
+            <ShiftForm defaultVehicle={lastVehicle} onSubmit={addShift} onCancel={() => setAddingShift(false)} />
+          </div>
+        ) : (
+          <button
+            onClick={() => setAddingShift(true)}
+            className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-medium"
+            style={{ backgroundColor: T.red, color: "#fff" }}
+          >
+            <Plus size={17} /> Añadir turno
+          </button>
+        )}
+
+        <PlatformSummary items={agg.porGrupo} />
+
         <ConfigPanel config={config} onSave={onSaveConfig} />
 
-        {/* Indicador visible de qué MPG se está usando ahora. [ajuste 1] */}
-        <div
-          className="text-[12px] px-1 -mt-1"
-          style={{ color: effInfo.source === "real" ? T.ok : T.textFaint }}
-        >
-          {effInfo.source === "real"
-            ? `Calculando con MPG real: ${effInfo.real}`
-            : `Calculando con MPG asumido: ${effInfo.mpg}`}
+        {/* Indicador visible de qué MPG se está usando por carro. [ajuste 1] */}
+        <div className="text-[12px] px-1 -mt-1 space-y-0.5">
+          {VEHICLE_IDS.map((id) => {
+            const e = effByVehicle[id];
+            return (
+              <div key={id} style={{ color: e.source === "real" ? T.ok : T.textFaint }}>
+                {vehicleLabel(id)}: {e.source === "real" ? `MPG real ${e.real}` : `MPG asumido ${e.mpg}`}
+              </div>
+            );
+          })}
         </div>
 
         <FuelupsPanel
           fuelups={fuelups}
-          effInfo={effInfo}
+          effByVehicle={effByVehicle}
           weekStartDow={config.pay_week_start_day}
           onAdd={addFuelup}
           onDelete={deleteFuelup}
@@ -341,16 +454,24 @@ export default function Earnings() {
           onDelete={deleteMeal}
         />
 
+        <TollsPanel
+          tolls={tolls}
+          weekStartDow={config.pay_week_start_day}
+          onAdd={addToll}
+          onImport={importTolls}
+          onDelete={deleteToll}
+        />
+
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[14px] font-medium"
-            style={{ backgroundColor: T.red, color: "#fff" }}
+            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
+            style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
           >
-            <Upload size={16} /> Importar ruta
+            <Upload size={15} /> Importar CSV
           </button>
           <button
-            onClick={downloadPlantillaCSV}
+            onClick={downloadPlantillaTurnos}
             className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
             style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
           >
@@ -384,23 +505,33 @@ export default function Earnings() {
 
         <div>
           <div className="gc-eyebrow text-[11px] uppercase px-1 py-1.5" style={{ color: T.textFaint }}>
-            Rutas
+            Turnos y rutas
           </div>
           {routesOrdenadas.length === 0 ? (
             <div className="text-center py-8 text-[13.5px]" style={{ color: T.textFaint }}>
-              Aún no hay rutas. Toca "Importar ruta" y sube tu CSV de OnTrac.
+              Aún no hay registros. Toca "Añadir turno" para apuntar tu primer bloque.
             </div>
           ) : (
             <div className="space-y-2">
-              {routesOrdenadas.map((r) => (
+              {routesOrdenadas.map((r) =>
+                isShift(r) ? (
+                  <ShiftCard
+                    key={r.id}
+                    route={r}
+                    config={configFor(r)}
+                    onSave={(input) => editShift(r.id, input)}
+                    onDelete={deleteRoute}
+                  />
+                ) : (
                 <RouteCard
                   key={r.id}
                   route={r}
-                  config={effConfig}
+                  config={configFor(r)}
                   onSave={(fields) => updateRoute(r.id, fields)}
                   onDelete={deleteRoute}
                 />
-              ))}
+                )
+              )}
             </div>
           )}
         </div>

@@ -281,6 +281,9 @@ function emptyTotals() {
     fuel_cost: 0,
     maintenance_est: 0,
     net_profit: 0,
+    propinas: 0,
+    horas: 0, // solo registros con horas conocidas
+    net_con_horas: 0, // neto de esos mismos registros (para $/hora honesto)
   };
 }
 
@@ -293,25 +296,47 @@ function addRoute(acc, r, eco) {
   acc.fuel_cost = round2(acc.fuel_cost + eco.fuel_cost);
   acc.maintenance_est = round2(acc.maintenance_est + eco.maintenance_est);
   acc.net_profit = round2(acc.net_profit + eco.net_profit);
+  acc.propinas = round2(acc.propinas + (Number(r.propina) || 0));
+  const h = Number(r.horas);
+  if (Number.isFinite(h) && h > 0) {
+    acc.horas = round2(acc.horas + h);
+    acc.net_con_horas = round2(acc.net_con_horas + eco.net_profit);
+  }
   return acc;
+}
+
+// Neto por hora, solo con registros que tienen horas. Sin horas → null.
+export function netPerHour(t) {
+  const h = Number(t && t.horas);
+  if (!Number.isFinite(h) || h <= 0) return null;
+  return round2((Number(t.net_con_horas) || 0) / h);
 }
 
 // Agrega el cost_per_mile del periodo a partir de sus totales sumados.
 function withCostPerMile(t) {
-  return { ...t, cost_per_mile: costPerMile(t.fuel_cost, t.maintenance_est, t.millas) };
+  return {
+    ...t,
+    cost_per_mile: costPerMile(t.fuel_cost, t.maintenance_est, t.millas),
+    net_per_hour: netPerHour(t),
+  };
 }
 
 // Devuelve totales globales y agrupados por semana y por mes (ordenados desc).
 // `config` es opcional (default DEFAULT_CONFIG) → llamadas antiguas sin config
 // siguen funcionando; los derivados se calculan en runtime, nunca se guardan.
-export function aggregate(routes, config = DEFAULT_CONFIG) {
+// `groupOf(route)` opcional: además agrupa por esa clave (ej. plataforma) en
+// `porGrupo`. Sin él, `porGrupo` queda vacío.
+// `configFor(route)` opcional: config de costos propia de cada registro (ej. el
+// vehículo usado). Sin él, todos usan `config`.
+export function aggregate(routes, config = DEFAULT_CONFIG, groupOf = null, configFor = null) {
   const cfg = config || DEFAULT_CONFIG;
   const startDow = Number.isInteger(cfg.pay_week_start_day) ? cfg.pay_week_start_day : 6;
   const total = emptyTotals();
   const semanas = new Map();
   const meses = new Map();
+  const grupos = new Map();
   for (const r of routes) {
-    const eco = routeEconomics(r, cfg);
+    const eco = routeEconomics(r, configFor ? configFor(r) : cfg);
     addRoute(total, r, eco);
     const wk = payWeekKey(r.fecha, startDow); // semana de pago sáb→vie
     if (!semanas.has(wk)) semanas.set(wk, emptyTotals());
@@ -319,6 +344,11 @@ export function aggregate(routes, config = DEFAULT_CONFIG) {
     const mk = monthKey(r.fecha);
     if (!meses.has(mk)) meses.set(mk, emptyTotals());
     addRoute(meses.get(mk), r, eco);
+    if (groupOf) {
+      const gk = groupOf(r);
+      if (!grupos.has(gk)) grupos.set(gk, emptyTotals());
+      addRoute(grupos.get(gk), r, eco);
+    }
   }
   const toSortedArray = (map) =>
     Array.from(map.entries())
@@ -328,6 +358,10 @@ export function aggregate(routes, config = DEFAULT_CONFIG) {
     total: withCostPerMile(total),
     porSemana: toSortedArray(semanas),
     porMes: toSortedArray(meses),
+    porGrupo: Array.from(grupos.entries()).map(([key, totals]) => ({
+      key,
+      ...withCostPerMile(totals),
+    })),
   };
 }
 

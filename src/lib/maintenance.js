@@ -6,9 +6,10 @@
 import { makeUUID, round2, monthKey } from "./earnings.js";
 import { MAINT_TYPES } from "./constants.js";
 
-export function makeMaint({ fecha, tipo, costo, odometro }) {
+export function makeMaint({ fecha, tipo, costo, odometro, vehiculo }) {
   return {
     id: makeUUID(),
+    vehiculo: vehiculo || "kia",
     fecha: String(fecha || "").slice(0, 10),
     tipo: MAINT_TYPES.includes(tipo) ? tipo : "repair",
     costo: costo === "" || costo == null ? null : Number(costo),

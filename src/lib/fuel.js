@@ -9,9 +9,10 @@ function round1(n) {
 }
 
 // Normaliza un fuel-up de entrada a su forma persistible.
-export function makeFuelup({ fecha, galones, costo, odometro }) {
+export function makeFuelup({ fecha, galones, costo, odometro, vehiculo }) {
   return {
     id: makeUUID(),
+    vehiculo: vehiculo || "kia",
     fecha: String(fecha || "").slice(0, 10),
     galones: Number(galones) || 0,
     costo: costo === "" || costo == null ? null : Number(costo),

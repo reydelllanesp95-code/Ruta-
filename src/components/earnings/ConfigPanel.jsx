@@ -10,12 +10,16 @@ export default function ConfigPanel({ config, onSave }) {
   const [gas, setGas] = useState(String(config.gas_price));
   const [mpg, setMpg] = useState(String(config.mpg));
   const [maint, setMaint] = useState(String(config.maintenance_cost_per_mile));
+  const [tMpg, setTMpg] = useState(String(config.tucson_mpg));
+  const [tMaint, setTMaint] = useState(String(config.tucson_maintenance_cost_per_mile));
   const [error, setError] = useState("");
 
   function start() {
     setGas(String(config.gas_price));
     setMpg(String(config.mpg));
     setMaint(String(config.maintenance_cost_per_mile));
+    setTMpg(String(config.tucson_mpg));
+    setTMaint(String(config.tucson_maintenance_cost_per_mile));
     setError("");
     setOpen(true);
   }
@@ -27,7 +31,18 @@ export default function ConfigPanel({ config, onSave }) {
     if (!g.ok) return setError(g.error);
     if (!Number.isFinite(m) || m <= 0) return setError("El MPG debe ser mayor que 0.");
     if (!mt.ok) return setError(mt.error);
-    onSave({ gas_price: g.value, mpg: m, maintenance_cost_per_mile: mt.value });
+    const tm = Number(tMpg);
+    const tmt = validateNonNegative(tMaint, "El mantenimiento por milla del Tucson");
+    if (!Number.isFinite(tm) || tm <= 0) return setError("El MPG del Tucson debe ser mayor que 0.");
+    if (!tmt.ok) return setError(tmt.error);
+    onSave({
+      ...config,
+      gas_price: g.value,
+      mpg: m,
+      maintenance_cost_per_mile: mt.value,
+      tucson_mpg: tm,
+      tucson_maintenance_cost_per_mile: tmt.value,
+    });
     setOpen(false);
   }
 
@@ -39,8 +54,8 @@ export default function ConfigPanel({ config, onSave }) {
         style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}
       >
         <span className="flex items-center gap-2 text-[13px]" style={{ color: T.textSecondary }}>
-          <Fuel size={15} /> Gasolina ${Number(config.gas_price).toFixed(2)}/gal · {config.mpg} MPG ·
-          mant ${Number(config.maintenance_cost_per_mile).toFixed(2)}/mi
+          <Fuel size={15} /> Gas ${Number(config.gas_price).toFixed(2)}/gal · Kia {config.mpg} · Tucson{" "}
+          {config.tucson_mpg} MPG
         </span>
         <Settings size={15} style={{ color: T.textFaint }} />
       </button>
@@ -59,8 +74,20 @@ export default function ConfigPanel({ config, onSave }) {
       </div>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Gas $/gal" value={gas} onChange={setGas} />
-        <Field label="MPG" value={mpg} onChange={setMpg} />
+      </div>
+      <div className="text-[11px] mt-2 mb-1" style={{ color: T.textSecondary }}>
+        Kia Sorento
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="MPG asumido" value={mpg} onChange={setMpg} />
         <Field label="Mant $/mi" value={maint} onChange={setMaint} />
+      </div>
+      <div className="text-[11px] mt-2 mb-1" style={{ color: T.textSecondary }}>
+        Hyundai Tucson
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="MPG asumido" value={tMpg} onChange={setTMpg} />
+        <Field label="Mant $/mi" value={tMaint} onChange={setTMaint} />
       </div>
       {error && (
         <div className="text-[12px] mt-2" style={{ color: T.red }}>
@@ -75,8 +102,8 @@ export default function ConfigPanel({ config, onSave }) {
         <Save size={14} /> Guardar
       </button>
       <div className="text-[11px] mt-2" style={{ color: T.textFaint }}>
-        El precio de gasolina es una suposición editable. La ganancia neta es un
-        estimado; la bruta ($/paquete) no cambia.
+        El MPG asumido se usa hasta que haya 2 llenados de ese carro; luego se usa
+        el real. El MPG del Tucson (25) es una suposición: ajústalo si sabes el tuyo.
       </div>
     </div>
   );

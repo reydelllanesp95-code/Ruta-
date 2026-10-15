@@ -14,6 +14,7 @@ export const KEY_CONFIG = "ruta_config_v1"; // configuración global (gas/mpg/ma
 export const KEY_FUELUPS = "ruta_fuelups_v1"; // historial de llenados de gasolina
 export const KEY_MAINT = "ruta_maint_v1"; // historial de mantenimiento
 export const KEY_MEALS = "ruta_meals_v1"; // gastos de comida del día de trabajo
+export const KEY_TOLLS = "ruta_tolls_v1"; // peajes (SunPass / E-PASS)
 
 // Tipos de mantenimiento (reutilizable en UI y validación).
 export const MAINT_TYPES = ["oil", "tires", "brakes", "repair"];
@@ -47,9 +48,15 @@ export const MAINT_PER_MILE_DEFAULT = 0.1; // USD/milla de mantenimiento estimad
 // los viernes, así que la semana va sábado→viernes: inicia en sábado (6).
 export const PAY_WEEK_START_DEFAULT = 6;
 
+// Segundo vehículo: Hyundai Tucson. MPG asumido para reparto en ciudad; es una
+// suposición editable (no verificada para su año/motor) hasta tener llenados reales.
+export const TUCSON_MPG_DEFAULT = 25;
+
 export const DEFAULT_CONFIG = {
   gas_price: GAS_PRICE_DEFAULT,
-  mpg: MPG_DEFAULT,
-  maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT,
+  mpg: MPG_DEFAULT, // Kia (clave histórica, se mantiene)
+  maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT, // Kia
+  tucson_mpg: TUCSON_MPG_DEFAULT,
+  tucson_maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT,
   pay_week_start_day: PAY_WEEK_START_DEFAULT,
 };

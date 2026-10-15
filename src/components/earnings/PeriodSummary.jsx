@@ -35,7 +35,10 @@ export default function PeriodSummary({ title, items, labelFor, defaultOpen = fa
                 {labelFor(it.key)}
               </div>
               <div className="text-[11.5px]" style={{ color: T.textFaint }}>
-                {it.paquetes} paq · {it.paradas} paradas · {it.millas} mi · {it.rutas} rutas
+                {it.paquetes > 0 ? `${it.paquetes} paq · ` : ""}
+                {it.horas > 0 ? `${it.horas} h · ` : ""}
+                {it.millas} mi · {it.rutas} registro(s)
+                {it.net_per_hour != null ? ` · ${formatMoney(it.net_per_hour)}/h` : ""}
               </div>
             </div>
             <div
