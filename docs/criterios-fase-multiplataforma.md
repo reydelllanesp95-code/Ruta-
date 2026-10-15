@@ -60,3 +60,18 @@ Escritos antes de implementar (15-oct-2026). No se cambian tras ver resultados.
 4. La tarjeta del turno muestra salida → bloque → llegada, las horas reales y las del bloque. Las tarjetas de semana/mes muestran las horas reales.
 5. Importar CSV: columnas opcionales `salida,llegada`; un CSV con la plantilla anterior (sin ellas) sigue importando igual (test).
 6. `npm test` en verde (114 previos + nuevos) y `npm run build` OK.
+
+---
+
+# Fase D: turno en curso que no se pierde
+
+Problema real (15-oct-2026): al minimizar la app un rato, el iPhone la cierra y el formulario del turno vuelve vacío; Rey tuvo que meter los datos varias veces.
+
+Escritos antes de implementar. No se cambian tras ver resultados.
+
+1. Lo que se escribe en un turno NUEVO se guarda en el teléfono a cada cambio (borrador). Si la app se cierra y se vuelve a abrir, el formulario aparece abierto con todo lo escrito (test con almacenamiento simulado: escribir → desmontar → montar de nuevo → los datos siguen).
+2. Botón **"Ahora"** junto a cada hora (salí de casa, inicio, fin, llegué a casa) que pone la hora actual con un toque.
+3. Al guardar el turno, el borrador se borra. Cancelar NO lo borra (se puede retomar); hay un botón explícito "Descartar borrador" que pide confirmación.
+4. Editar un turno ya guardado no toca el borrador.
+5. Si el almacenamiento falla o el borrador está corrupto, la app no se rompe: arranca con el formulario vacío.
+6. `npm test` en verde (123 previos + nuevos) y `npm run build` OK.

@@ -10,6 +10,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
+import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
 import { T } from "../lib/theme.js";
 import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
@@ -64,7 +65,9 @@ export default function Earnings() {
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
   const [saveState, setSaveState] = useState("idle");
-  const [addingShift, setAddingShift] = useState(false);
+  // Si quedó un turno a medias (la app se cerró), el formulario abre solo.
+  const [addingShift, setAddingShift] = useState(() => draftHasData(loadDraft()));
+  const [hayBorrador, setHayBorrador] = useState(() => draftHasData(loadDraft()));
 
   const fileRef = useRef(null);
   const backupRef = useRef(null);
@@ -280,6 +283,8 @@ export default function Earnings() {
   function addShift(input) {
     try {
       persist([...routes, makeShift(input)]);
+      clearDraft();
+      setHayBorrador(false);
       setAddingShift(false);
       setMsg({ tipo: "ok", texto: "Turno guardado." });
     } catch (err) {
@@ -413,9 +418,17 @@ export default function Earnings() {
         {addingShift ? (
           <div className="rounded-xl p-3" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
             <div className="gc-eyebrow text-[11px] uppercase mb-2" style={{ color: T.textFaint }}>
-              Nuevo turno
+              Turno en curso
             </div>
-            <ShiftForm defaultVehicle={lastVehicle} onSubmit={addShift} onCancel={() => setAddingShift(false)} />
+            <ShiftForm
+              persistDraft
+              defaultVehicle={lastVehicle}
+              onSubmit={addShift}
+              onCancel={() => {
+                setHayBorrador(draftHasData(loadDraft()));
+                setAddingShift(false);
+              }}
+            />
           </div>
         ) : (
           <button
@@ -423,7 +436,7 @@ export default function Earnings() {
             className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-medium"
             style={{ backgroundColor: T.red, color: "#fff" }}
           >
-            <Plus size={17} /> Añadir turno
+            <Plus size={17} /> {hayBorrador ? "Seguir turno en curso" : "Añadir turno"}
           </button>
         )}
 

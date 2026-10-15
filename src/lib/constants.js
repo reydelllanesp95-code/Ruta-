@@ -15,6 +15,7 @@ export const KEY_FUELUPS = "ruta_fuelups_v1"; // historial de llenados de gasoli
 export const KEY_MAINT = "ruta_maint_v1"; // historial de mantenimiento
 export const KEY_MEALS = "ruta_meals_v1"; // gastos de comida del día de trabajo
 export const KEY_TOLLS = "ruta_tolls_v1"; // peajes (SunPass / E-PASS)
+export const KEY_SHIFT_DRAFT = "ruta_turno_en_curso_v1"; // borrador del turno que se está apuntando
 
 // Tipos de mantenimiento (reutilizable en UI y validación).
 export const MAINT_TYPES = ["oil", "tires", "brakes", "repair"];
