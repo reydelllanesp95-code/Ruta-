@@ -36,6 +36,8 @@ export default function ShiftForm({
   const [fecha, setFecha] = useState(i.fecha || todayISO());
   const [horaInicio, setHoraInicio] = useState(i.horaInicio || "");
   const [horaFin, setHoraFin] = useState(i.horaFin || "");
+  const [salidaCasa, setSalidaCasa] = useState(i.salidaCasa || "");
+  const [llegadaCasa, setLlegadaCasa] = useState(i.llegadaCasa || "");
   const [millas, setMillas] = useState(i.millas != null ? String(i.millas) : "");
   const [pago, setPago] = useState(i.pagoBase != null ? String(i.pagoBase) : "");
   const [propina, setPropina] = useState(i.propina ? String(i.propina) : "");
@@ -43,6 +45,7 @@ export default function ShiftForm({
   const [error, setError] = useState("");
 
   const horas = hoursBetween(horaInicio, horaFin);
+  const horasReales = hoursBetween(salidaCasa, llegadaCasa);
   const oi = Number(odoInicio);
   const of = Number(odoFin);
   const odoMillas =
@@ -51,7 +54,21 @@ export default function ShiftForm({
       : null;
 
   function submit() {
-    const input = { plataforma, fecha, horaInicio, horaFin, millas, pago, propina, nota, vehiculo, odoInicio, odoFin };
+    const input = {
+      plataforma,
+      fecha,
+      salidaCasa,
+      horaInicio,
+      horaFin,
+      llegadaCasa,
+      millas,
+      pago,
+      propina,
+      nota,
+      vehiculo,
+      odoInicio,
+      odoFin,
+    };
     const chk = validateShift(input);
     if (!chk.ok) return setError(chk.error);
     setError("");
@@ -96,11 +113,17 @@ export default function ShiftForm({
       <Field label="Fecha">{input(fecha, setFecha, { type: "date" })}</Field>
 
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Inicio">{input(horaInicio, setHoraInicio, { type: "time" })}</Field>
-        <Field label="Fin">{input(horaFin, setHoraFin, { type: "time" })}</Field>
+        <Field label="Salí de casa">{input(salidaCasa, setSalidaCasa, { type: "time" })}</Field>
+        <Field label="Inicio bloque">{input(horaInicio, setHoraInicio, { type: "time" })}</Field>
+        <Field label="Fin bloque">{input(horaFin, setHoraFin, { type: "time" })}</Field>
+        <Field label="Llegué a casa">{input(llegadaCasa, setLlegadaCasa, { type: "time" })}</Field>
       </div>
       <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
-        {horas != null ? `${horas} h de trabajo` : "Sin horas no se puede calcular tu $/hora"}
+        {horasReales != null
+          ? `${horasReales} h reales (puerta a puerta)${horas != null ? ` · ${horas} h de bloque` : ""}`
+          : horas != null
+            ? `${horas} h de bloque · pon salida y llegada para tu $/hora real`
+            : "Sin horas no se puede calcular tu $/hora"}
       </div>
 
       <div className="grid grid-cols-2 gap-2">

@@ -93,6 +93,23 @@ export function validateShift(input) {
   if (hayInicio && hoursBetween(i.horaInicio, i.horaFin) == null) {
     return { ok: false, error: "Las horas no son válidas." };
   }
+  // Salida y llegada a casa (opcionales): horas reales puerta a puerta.
+  const haySalida = Boolean(i.salidaCasa);
+  const hayLlegada = Boolean(i.llegadaCasa);
+  if (haySalida !== hayLlegada) {
+    return { ok: false, error: "Pon la hora de salida de casa y la de llegada, o ninguna." };
+  }
+  if (haySalida) {
+    const reales = hoursBetween(i.salidaCasa, i.llegadaCasa);
+    if (reales == null) return { ok: false, error: "Las horas de salida y llegada no son válidas." };
+    const bloque = hayInicio ? hoursBetween(i.horaInicio, i.horaFin) : null;
+    if (bloque != null && reales < bloque) {
+      return {
+        ok: false,
+        error: "La salida y llegada a casa no cuadran: dan menos horas que el bloque.",
+      };
+    }
+  }
   return {
     ok: true,
     values: {
@@ -106,6 +123,8 @@ export function validateShift(input) {
       odoFin,
       horaInicio: hayInicio ? i.horaInicio : "",
       horaFin: hayFin ? i.horaFin : "",
+      salidaCasa: haySalida ? i.salidaCasa : "",
+      llegadaCasa: hayLlegada ? i.llegadaCasa : "",
     },
   };
 }
@@ -119,6 +138,10 @@ function shiftFields(v, nota) {
     horaInicio: v.horaInicio,
     horaFin: v.horaFin,
     horas: hoursBetween(v.horaInicio, v.horaFin),
+    salidaCasa: v.salidaCasa,
+    llegadaCasa: v.llegadaCasa,
+    // Horas reales (puerta a puerta) si hay salida/llegada; si no, null.
+    horasReales: hoursBetween(v.salidaCasa, v.llegadaCasa),
     millas: v.millas,
     vehiculo: v.vehiculo,
     odoInicio: v.odoInicio,
@@ -171,7 +194,7 @@ const PLATFORM_ALIASES = {
 };
 const VEHICLE_ALIASES = { kia: "kia", sorento: "kia", "kia sorento": "kia", tucson: "tucson", hyundai: "tucson", "hyundai tucson": "tucson" };
 
-export const SHIFT_CSV_HEADER = "plataforma,fecha,inicio,fin,pago,propina,millas,vehiculo,nota";
+export const SHIFT_CSV_HEADER = "plataforma,fecha,salida,inicio,fin,llegada,pago,propina,millas,vehiculo,nota";
 
 export function isShiftsCSVHeader(normHeader) {
   return normHeader.includes("plataforma") && normHeader.includes("pago");
@@ -205,6 +228,8 @@ export function parseShiftRows(rows, existentes = []) {
       fecha: get(row, "fecha"),
       horaInicio: get(row, "inicio"),
       horaFin: get(row, "fin"),
+      salidaCasa: get(row, "salida"),
+      llegadaCasa: get(row, "llegada"),
       pago: get(row, "pago").replace(/[$,]/g, ""),
       propina: get(row, "propina").replace(/[$,]/g, ""),
       millas: get(row, "millas"),
