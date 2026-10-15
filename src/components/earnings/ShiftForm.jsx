@@ -3,6 +3,7 @@ import { Save, X, Trash2 } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO } from "../../lib/earnings.js";
 import { ACTIVE_PLATFORMS, platformLabel, validateShift, hoursBetween } from "../../lib/platforms.js";
+import VehiclePicker from "./VehiclePicker.jsx";
 
 const inputStyle = { backgroundColor: T.surfaceRaised, color: T.textPrimary, border: `1px solid ${T.border}` };
 
@@ -18,8 +19,19 @@ function Field({ label, children }) {
 }
 
 // Formulario de turno (Flex / Spark / Otro). Sirve para crear y para editar.
-export default function ShiftForm({ initial, onSubmit, onCancel, onDelete, submitLabel = "Guardar turno" }) {
+// `defaultVehicle`: el último vehículo usado, para no tener que elegirlo cada vez.
+export default function ShiftForm({
+  initial,
+  defaultVehicle = "kia",
+  onSubmit,
+  onCancel,
+  onDelete,
+  submitLabel = "Guardar turno",
+}) {
   const i = initial || {};
+  const [vehiculo, setVehiculo] = useState(i.vehiculo || defaultVehicle);
+  const [odoInicio, setOdoInicio] = useState(i.odoInicio != null ? String(i.odoInicio) : "");
+  const [odoFin, setOdoFin] = useState(i.odoFin != null ? String(i.odoFin) : "");
   const [plataforma, setPlataforma] = useState(i.plataforma || "flex");
   const [fecha, setFecha] = useState(i.fecha || todayISO());
   const [horaInicio, setHoraInicio] = useState(i.horaInicio || "");
@@ -31,9 +43,15 @@ export default function ShiftForm({ initial, onSubmit, onCancel, onDelete, submi
   const [error, setError] = useState("");
 
   const horas = hoursBetween(horaInicio, horaFin);
+  const oi = Number(odoInicio);
+  const of = Number(odoFin);
+  const odoMillas =
+    odoInicio !== "" && odoFin !== "" && Number.isFinite(oi) && Number.isFinite(of) && of > oi
+      ? Math.round((of - oi) * 10) / 10
+      : null;
 
   function submit() {
-    const input = { plataforma, fecha, horaInicio, horaFin, millas, pago, propina, nota };
+    const input = { plataforma, fecha, horaInicio, horaFin, millas, pago, propina, nota, vehiculo, odoInicio, odoFin };
     const chk = validateShift(input);
     if (!chk.ok) return setError(chk.error);
     setError("");
@@ -73,6 +91,8 @@ export default function ShiftForm({ initial, onSubmit, onCancel, onDelete, submi
         })}
       </div>
 
+      <VehiclePicker value={vehiculo} onChange={setVehiculo} />
+
       <Field label="Fecha">{input(fecha, setFecha, { type: "date" })}</Field>
 
       <div className="grid grid-cols-2 gap-2">
@@ -83,11 +103,24 @@ export default function ShiftForm({ initial, onSubmit, onCancel, onDelete, submi
         {horas != null ? `${horas} h de trabajo` : "Sin horas no se puede calcular tu $/hora"}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <Field label="Pago $">{input(pago, setPago, { inputMode: "decimal", placeholder: "0" })}</Field>
         <Field label="Propina $">{input(propina, setPropina, { inputMode: "decimal", placeholder: "0" })}</Field>
-        <Field label="Millas">{input(millas, setMillas, { inputMode: "decimal", placeholder: "0" })}</Field>
       </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Odómetro inicio">{input(odoInicio, setOdoInicio, { inputMode: "decimal", placeholder: "opcional" })}</Field>
+        <Field label="Odómetro fin">{input(odoFin, setOdoFin, { inputMode: "decimal", placeholder: "opcional" })}</Field>
+      </div>
+      {odoMillas != null ? (
+        <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
+          {odoMillas} millas (del odómetro)
+        </div>
+      ) : (
+        <Field label="Millas (si no usas odómetro)">
+          {input(millas, setMillas, { inputMode: "decimal", placeholder: "0" })}
+        </Field>
+      )}
 
       <Field label="Nota (opcional)">{input(nota, setNota, { placeholder: "Ej. bloque Whole Foods" })}</Field>
 

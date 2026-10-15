@@ -326,7 +326,9 @@ function withCostPerMile(t) {
 // siguen funcionando; los derivados se calculan en runtime, nunca se guardan.
 // `groupOf(route)` opcional: además agrupa por esa clave (ej. plataforma) en
 // `porGrupo`. Sin él, `porGrupo` queda vacío.
-export function aggregate(routes, config = DEFAULT_CONFIG, groupOf = null) {
+// `configFor(route)` opcional: config de costos propia de cada registro (ej. el
+// vehículo usado). Sin él, todos usan `config`.
+export function aggregate(routes, config = DEFAULT_CONFIG, groupOf = null, configFor = null) {
   const cfg = config || DEFAULT_CONFIG;
   const startDow = Number.isInteger(cfg.pay_week_start_day) ? cfg.pay_week_start_day : 6;
   const total = emptyTotals();
@@ -334,7 +336,7 @@ export function aggregate(routes, config = DEFAULT_CONFIG, groupOf = null) {
   const meses = new Map();
   const grupos = new Map();
   for (const r of routes) {
-    const eco = routeEconomics(r, cfg);
+    const eco = routeEconomics(r, configFor ? configFor(r) : cfg);
     addRoute(total, r, eco);
     const wk = payWeekKey(r.fecha, startDow); // semana de pago sáb→vie
     if (!semanas.has(wk)) semanas.set(wk, emptyTotals());

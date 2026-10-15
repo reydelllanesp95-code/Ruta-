@@ -3,6 +3,7 @@ import { Clock, Navigation, Pencil, HandCoins } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, routeEconomics, fechaCorta } from "../../lib/earnings.js";
 import { platformLabel } from "../../lib/platforms.js";
+import { vehicleOf, vehicleLabel } from "../../lib/vehicles.js";
 import ShiftForm from "./ShiftForm.jsx";
 
 // Tarjeta de un turno manual (Flex / Spark / Otro).
@@ -32,7 +33,7 @@ export default function ShiftCard({ route, config, onSave, onDelete }) {
               <Clock size={12} /> {horas ? `${route.horaInicio}–${route.horaFin} · ${horas} h` : "sin horas"}
             </span>
             <span className="flex items-center gap-1">
-              <Navigation size={12} /> {route.millas} mi
+              <Navigation size={12} /> {route.millas} mi · {vehicleLabel(vehicleOf(route)).split(" ")[1]}
             </span>
           </div>
           {route.propina > 0 && (

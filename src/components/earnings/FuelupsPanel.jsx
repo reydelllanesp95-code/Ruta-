@@ -8,10 +8,16 @@ import {
   avgDaysBetweenFillups,
   fuelSpendByPeriod,
 } from "../../lib/fuel.js";
+import { forVehicle, vehicleLabel } from "../../lib/vehicles.js";
+import VehiclePicker from "./VehiclePicker.jsx";
 
 // Panel de llenados de gasolina (fuel-ups): MPG real + insights de gasto/frecuencia.
-export default function FuelupsPanel({ fuelups, effInfo, weekStartDow = 6, onAdd, onDelete }) {
+// `effByVehicle` = { kia: effInfo, tucson: effInfo }. Todo se ve y valida por vehículo.
+export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekStartDow = 6, onAdd, onDelete }) {
   const [open, setOpen] = useState(false);
+  const [vehiculo, setVehiculo] = useState("kia");
+  const fuelups = forVehicle(allFuelups, vehiculo);
+  const effInfo = effByVehicle[vehiculo];
   const [fecha, setFecha] = useState(todayISO());
   const [galones, setGalones] = useState("");
   const [costo, setCosto] = useState("");
@@ -26,7 +32,7 @@ export default function FuelupsPanel({ fuelups, effInfo, weekStartDow = 6, onAdd
     setError("");
     const chk = validateFuelup({ galones, odometro }, prevOdo); // [ajuste 3]
     if (!chk.ok) return setError(chk.error);
-    onAdd({ fecha, galones, costo, odometro });
+    onAdd({ fecha, galones, costo, odometro, vehiculo });
     setGalones("");
     setCosto("");
     setOdometro("");
@@ -46,10 +52,11 @@ export default function FuelupsPanel({ fuelups, effInfo, weekStartDow = 6, onAdd
         style={{ backgroundColor: T.surface }}
       >
         <span className="flex items-center gap-2 text-[13px]" style={{ color: T.textSecondary }}>
-          <Fuel size={15} /> Gasolina · {fuelups.length} llenado(s)
+          <Fuel size={15} /> Gasolina · {allFuelups.length} llenado(s)
         </span>
         <span className="flex items-center gap-2">
           <span className="text-[12px]" style={{ color: effInfo.source === "real" ? T.ok : T.textFaint }}>
+            {open ? vehicleLabel(vehiculo) + ": " : ""}
             {effInfo.source === "real" ? `MPG real ${effInfo.real}` : `MPG asumido ${effInfo.mpg}`}
           </span>
           <Chevron size={16} style={{ color: T.textFaint }} />
@@ -58,6 +65,13 @@ export default function FuelupsPanel({ fuelups, effInfo, weekStartDow = 6, onAdd
 
       {open && (
         <div className="p-3 space-y-3" style={{ backgroundColor: T.surfaceRaised, borderTop: `1px solid ${T.borderSoft}` }}>
+          <VehiclePicker
+            value={vehiculo}
+            onChange={(v) => {
+              setVehiculo(v);
+              setError("");
+            }}
+          />
           {effInfo.source !== "real" && (
             <div className="text-[12px]" style={{ color: T.textFaint }}>
               Agrega al menos 2 llenados con odómetro para calcular tu MPG real.

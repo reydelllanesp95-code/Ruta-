@@ -6,6 +6,7 @@
 
 import { SCHEMA_VERSION } from "./constants.js";
 import { makeUUID, round2, validateNonNegative, parseDatePart } from "./earnings.js";
+import { VEHICLES, DEFAULT_VEHICLE } from "./vehicles.js";
 
 export const PLATFORMS = {
   flex: { label: "Amazon Flex", archived: false },
@@ -59,7 +60,30 @@ export function validateShift(input) {
   if (!pago.ok) return { ok: false, error: pago.error };
   const propina = validateNonNegative(i.propina, "La propina");
   if (!propina.ok) return { ok: false, error: propina.error };
-  const millas = validateNonNegative(i.millas, "Las millas");
+  const vehiculo = i.vehiculo || DEFAULT_VEHICLE;
+  if (!VEHICLES[vehiculo]) return { ok: false, error: "Elige un vehículo." };
+  // Odómetro opcional: si vienen inicio y fin, las millas salen de ahí.
+  const hayOdoIni = i.odoInicio !== "" && i.odoInicio != null;
+  const hayOdoFin = i.odoFin !== "" && i.odoFin != null;
+  if (hayOdoIni !== hayOdoFin) {
+    return { ok: false, error: "Pon el odómetro de inicio y el de fin, o ninguno." };
+  }
+  let odoInicio = null;
+  let odoFin = null;
+  let millasInput = i.millas;
+  if (hayOdoIni) {
+    const a = validateNonNegative(i.odoInicio, "El odómetro de inicio");
+    const b = validateNonNegative(i.odoFin, "El odómetro de fin");
+    if (!a.ok) return { ok: false, error: a.error };
+    if (!b.ok) return { ok: false, error: b.error };
+    if (!(b.value > a.value)) {
+      return { ok: false, error: "El odómetro de fin debe ser mayor que el de inicio." };
+    }
+    odoInicio = a.value;
+    odoFin = b.value;
+    millasInput = round2(b.value - a.value);
+  }
+  const millas = validateNonNegative(millasInput, "Las millas");
   if (!millas.ok) return { ok: false, error: millas.error };
   const hayInicio = Boolean(i.horaInicio);
   const hayFin = Boolean(i.horaFin);
@@ -77,6 +101,9 @@ export function validateShift(input) {
       pago: pago.value,
       propina: propina.value,
       millas: millas.value,
+      vehiculo,
+      odoInicio,
+      odoFin,
       horaInicio: hayInicio ? i.horaInicio : "",
       horaFin: hayFin ? i.horaFin : "",
     },
@@ -93,6 +120,9 @@ function shiftFields(v, nota) {
     horaFin: v.horaFin,
     horas: hoursBetween(v.horaInicio, v.horaFin),
     millas: v.millas,
+    vehiculo: v.vehiculo,
+    odoInicio: v.odoInicio,
+    odoFin: v.odoFin,
     pagoBase: round2(v.pago),
     propina: round2(v.propina),
     ganancia: round2(v.pago + v.propina),

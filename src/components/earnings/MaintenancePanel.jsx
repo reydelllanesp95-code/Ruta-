@@ -4,11 +4,15 @@ import { T } from "../../lib/theme.js";
 import { todayISO, formatMoney, monthLabel } from "../../lib/earnings.js";
 import { MAINT_TYPES, MAINT_TYPE_LABELS } from "../../lib/constants.js";
 import { validateMaint, maintByMonth, histMaintCostPerMile } from "../../lib/maintenance.js";
+import { forVehicle } from "../../lib/vehicles.js";
+import VehiclePicker from "./VehiclePicker.jsx";
 
 // Panel de mantenimiento: histórico + insights informativos. NO cambia el
 // cálculo por ruta (eso usa el maintenance_cost_per_mile de la config).
-export default function MaintenancePanel({ maints, onAdd, onDelete, onApplyCostPerMile }) {
+export default function MaintenancePanel({ maints: allMaints, onAdd, onDelete, onApplyCostPerMile }) {
   const [open, setOpen] = useState(false);
+  const [vehiculo, setVehiculo] = useState("kia");
+  const maints = forVehicle(allMaints, vehiculo); // nunca mezclar odómetros de dos carros
   const [fecha, setFecha] = useState(todayISO());
   const [tipo, setTipo] = useState(MAINT_TYPES[0]);
   const [costo, setCosto] = useState("");
@@ -22,7 +26,7 @@ export default function MaintenancePanel({ maints, onAdd, onDelete, onApplyCostP
     setError("");
     const chk = validateMaint({ fecha, costo, odometro });
     if (!chk.ok) return setError(chk.error);
-    onAdd({ fecha, tipo, costo, odometro });
+    onAdd({ fecha, tipo, costo, odometro, vehiculo });
     setCosto("");
     setOdometro("");
   }
@@ -41,13 +45,14 @@ export default function MaintenancePanel({ maints, onAdd, onDelete, onApplyCostP
         style={{ backgroundColor: T.surface }}
       >
         <span className="flex items-center gap-2 text-[13px]" style={{ color: T.textSecondary }}>
-          <Wrench size={15} /> Mantenimiento · {maints.length} registro(s)
+          <Wrench size={15} /> Mantenimiento · {allMaints.length} registro(s)
         </span>
         <Chevron size={16} style={{ color: T.textFaint }} />
       </button>
 
       {open && (
         <div className="p-3 space-y-3" style={{ backgroundColor: T.surfaceRaised, borderTop: `1px solid ${T.borderSoft}` }}>
+          <VehiclePicker value={vehiculo} onChange={setVehiculo} />
           <div className="grid grid-cols-2 gap-2">
             <Field label="Fecha" value={fecha} onChange={setFecha} type="date" />
             <label className="block">
@@ -97,7 +102,7 @@ export default function MaintenancePanel({ maints, onAdd, onDelete, onApplyCostP
                     ~{formatMoney(hist.costPerMile)}/mi
                   </span>
                   <button
-                    onClick={() => onApplyCostPerMile(hist.costPerMile)}
+                    onClick={() => onApplyCostPerMile(hist.costPerMile, vehiculo)}
                     className="text-[12px] rounded-lg px-2.5 py-1"
                     style={{ backgroundColor: T.surfaceRaised, color: T.red, border: `1px solid ${T.redDim}` }}
                   >

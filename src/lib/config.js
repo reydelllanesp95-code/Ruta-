@@ -33,6 +33,11 @@ export function sanitizeConfig(raw) {
       c.maintenance_cost_per_mile,
       DEFAULT_CONFIG.maintenance_cost_per_mile
     ),
+    tucson_mpg: positive(c.tucson_mpg, DEFAULT_CONFIG.tucson_mpg),
+    tucson_maintenance_cost_per_mile: nonNeg(
+      c.tucson_maintenance_cost_per_mile,
+      DEFAULT_CONFIG.tucson_maintenance_cost_per_mile
+    ),
     pay_week_start_day: weekday(c.pay_week_start_day, DEFAULT_CONFIG.pay_week_start_day),
   };
 }

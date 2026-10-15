@@ -22,7 +22,8 @@ import {
   monthLabel,
 } from "../lib/earnings.js";
 import { loadConfig, saveConfig } from "../lib/config.js";
-import { effectiveMpg, makeFuelup } from "../lib/fuel.js";
+import { makeFuelup } from "../lib/fuel.js";
+import { vehicleConfigs, vehicleOf, vehicleLabel, VEHICLE_IDS, VEHICLES } from "../lib/vehicles.js";
 import { makeMaint } from "../lib/maintenance.js";
 import { makeMeal } from "../lib/meals.js";
 import { downloadBackup, restoreBackup, downloadPlantillaCSV } from "../lib/backup.js";
@@ -123,8 +124,8 @@ export default function Earnings() {
   const addMaint = (input) => persistMaints([...maints, makeMaint(input)]);
   const deleteMaint = (id) => persistMaints(maints.filter((m) => m.id !== id));
   // Botón MANUAL: solo si el usuario lo toca, copia el histórico a la config.
-  const applyMaintCostPerMile = (value) =>
-    onSaveConfig({ ...config, maintenance_cost_per_mile: value });
+  const applyMaintCostPerMile = (value, vehiculo = "kia") =>
+    onSaveConfig({ ...config, [VEHICLES[vehiculo].maintKey]: value });
 
   function persistMeals(next) {
     setMeals(next);
@@ -135,13 +136,20 @@ export default function Earnings() {
   const addMeal = (input) => persistMeals([...meals, makeMeal(input)]);
   const deleteMeal = (id) => persistMeals(meals.filter((m) => m.id !== id));
 
-  // MPG efectivo: DERIVADO en memoria, NUNCA se persiste. [ajuste 2]
-  // Si hay >=2 llenados válidos usa el MPG real; si no, el asumido de config.
-  const effInfo = useMemo(() => effectiveMpg(config, fuelups), [config, fuelups]);
-  const effConfig = useMemo(() => ({ ...config, mpg: effInfo.mpg }), [config, effInfo.mpg]);
+  // Config de costos POR VEHÍCULO: MPG real con sus propios llenados (o el
+  // asumido) y su mantenimiento/milla. DERIVADO, nunca se persiste. [ajuste 2]
+  const vCfgs = useMemo(() => vehicleConfigs(config, fuelups), [config, fuelups]);
+  const configFor = useMemo(() => (r) => vCfgs[vehicleOf(r)].config, [vCfgs]);
+  const effByVehicle = useMemo(
+    () => Object.fromEntries(VEHICLE_IDS.map((id) => [id, vCfgs[id].effInfo])),
+    [vCfgs]
+  );
 
-  // Agregaciones memoizadas: recalculan al cambiar rutas o el MPG efectivo. [Aud 16]
-  const agg = useMemo(() => aggregate(routes, effConfig, platformOf), [routes, effConfig]);
+  // Agregaciones memoizadas: recalculan al cambiar rutas o los costos. [Aud 16]
+  const agg = useMemo(
+    () => aggregate(routes, config, platformOf, configFor),
+    [routes, config, configFor]
+  );
 
   // Muestra el período ACTUAL; si está vacío, cae al más reciente con datos
   // (lista ya ordenada desc). Así "Este mes" no queda en $0 al iniciar el mes.
@@ -160,6 +168,16 @@ export default function Earnings() {
     const esActual = item.key === key;
     return { totals: item, label: esActual ? "Este mes" : monthLabel(item.key) };
   }, [agg]);
+  // Vehículo del turno más reciente: sale preseleccionado al añadir otro.
+  const lastVehicle = useMemo(() => {
+    const turnos = routes.filter(isShift);
+    if (!turnos.length) return "kia";
+    const last = turnos.reduce((a, b) =>
+      (a.fecha + (a.importadoEn || "")) >= (b.fecha + (b.importadoEn || "")) ? a : b
+    );
+    return vehicleOf(last);
+  }, [routes]);
+
   const routesOrdenadas = useMemo(
     () => [...routes].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
     [routes]
@@ -330,7 +348,7 @@ export default function Earnings() {
             <div className="gc-eyebrow text-[11px] uppercase mb-2" style={{ color: T.textFaint }}>
               Nuevo turno
             </div>
-            <ShiftForm onSubmit={addShift} onCancel={() => setAddingShift(false)} />
+            <ShiftForm defaultVehicle={lastVehicle} onSubmit={addShift} onCancel={() => setAddingShift(false)} />
           </div>
         ) : (
           <button
@@ -346,19 +364,21 @@ export default function Earnings() {
 
         <ConfigPanel config={config} onSave={onSaveConfig} />
 
-        {/* Indicador visible de qué MPG se está usando ahora. [ajuste 1] */}
-        <div
-          className="text-[12px] px-1 -mt-1"
-          style={{ color: effInfo.source === "real" ? T.ok : T.textFaint }}
-        >
-          {effInfo.source === "real"
-            ? `Calculando con MPG real: ${effInfo.real}`
-            : `Calculando con MPG asumido: ${effInfo.mpg}`}
+        {/* Indicador visible de qué MPG se está usando por carro. [ajuste 1] */}
+        <div className="text-[12px] px-1 -mt-1 space-y-0.5">
+          {VEHICLE_IDS.map((id) => {
+            const e = effByVehicle[id];
+            return (
+              <div key={id} style={{ color: e.source === "real" ? T.ok : T.textFaint }}>
+                {vehicleLabel(id)}: {e.source === "real" ? `MPG real ${e.real}` : `MPG asumido ${e.mpg}`}
+              </div>
+            );
+          })}
         </div>
 
         <FuelupsPanel
           fuelups={fuelups}
-          effInfo={effInfo}
+          effByVehicle={effByVehicle}
           weekStartDow={config.pay_week_start_day}
           onAdd={addFuelup}
           onDelete={deleteFuelup}
@@ -440,7 +460,7 @@ export default function Earnings() {
                   <ShiftCard
                     key={r.id}
                     route={r}
-                    config={effConfig}
+                    config={configFor(r)}
                     onSave={(input) => editShift(r.id, input)}
                     onDelete={deleteRoute}
                   />
@@ -448,7 +468,7 @@ export default function Earnings() {
                 <RouteCard
                   key={r.id}
                   route={r}
-                  config={effConfig}
+                  config={configFor(r)}
                   onSave={(fields) => updateRoute(r.id, fields)}
                   onDelete={deleteRoute}
                 />
