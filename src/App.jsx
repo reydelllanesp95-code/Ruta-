@@ -5,13 +5,14 @@ import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import GateCodeDirectory from "./components/GateCodeDirectory.jsx";
 import Earnings from "./components/Earnings.jsx";
 
+// Ganancias es la pantalla principal; Códigos queda como pestaña secundaria.
 const TABS = [
-  { id: "codigos", label: "Códigos", Icon: KeyRound },
   { id: "ganancias", label: "Ganancias", Icon: TrendingUp },
+  { id: "codigos", label: "Códigos", Icon: KeyRound },
 ];
 
 export default function App() {
-  const [tab, setTab] = useState("codigos");
+  const [tab, setTab] = useState("ganancias");
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: T.bg }}>
