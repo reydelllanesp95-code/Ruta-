@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
+import { lastOdometer } from "../lib/odometer.js";
 import { T } from "../lib/theme.js";
 import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
 import * as storage from "../lib/storage.js";
@@ -422,6 +423,9 @@ export default function Earnings() {
             </div>
             <ShiftForm
               persistDraft
+              lastOdoByVehicle={Object.fromEntries(
+                VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints })])
+              )}
               defaultVehicle={lastVehicle}
               onSubmit={addShift}
               onCancel={() => {

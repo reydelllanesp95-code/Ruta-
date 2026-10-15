@@ -75,3 +75,19 @@ Escritos antes de implementar. No se cambian tras ver resultados.
 4. Editar un turno ya guardado no toca el borrador.
 5. Si el almacenamiento falla o el borrador está corrupto, la app no se rompe: arranca con el formulario vacío.
 6. `npm test` en verde (123 previos + nuevos) y `npm run build` OK.
+
+---
+
+# Fase E: odómetro sin teclear el número entero
+
+Pedido de Rey (15-oct-2026): no escribir siempre el número largo del odómetro; que la app recuerde dónde se quedó y se ajuste con pocos toques, tipo rueda.
+
+Escritos antes de implementar. No se cambian tras ver resultados.
+
+1. **Último odómetro por carro**: el mayor odómetro conocido de ese vehículo entre turnos (inicio/fin), llenados y mantenimiento. Datos viejos sin `vehiculo` cuentan como Kia (test).
+2. Al empezar un turno NUEVO, el odómetro de inicio sale ya puesto con el último del carro elegido (si estaba vacío). Si se cambia de carro con el inicio aún sin tocar, cambia al del otro carro.
+3. **Rueda de dígitos**: cada dígito tiene ▲/▼; ▲ en la posición k suma 10^k (con acarreo, como un odómetro real) y ▼ resta; nunca baja de 0 (test de la función pura).
+4. El odómetro de fin arranca desde el de inicio: solo se ajustan los últimos dígitos.
+5. Sigue habiendo forma de escribir el número a mano.
+6. Todo esto entra en el borrador del turno en curso (no se pierde al cerrar la app).
+7. `npm test` en verde (129 previos + nuevos) y `npm run build` OK.

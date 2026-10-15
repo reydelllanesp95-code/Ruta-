@@ -4,6 +4,7 @@ import { T } from "../../lib/theme.js";
 import { todayISO } from "../../lib/earnings.js";
 import { ACTIVE_PLATFORMS, platformLabel, validateShift, hoursBetween } from "../../lib/platforms.js";
 import VehiclePicker from "./VehiclePicker.jsx";
+import OdometerWheel from "./OdometerWheel.jsx";
 import { loadDraft, saveDraft, clearDraft, nowHHMM } from "../../lib/shiftDraft.js";
 
 const inputStyle = { backgroundColor: T.surfaceRaised, color: T.textPrimary, border: `1px solid ${T.border}` };
@@ -27,6 +28,7 @@ export default function ShiftForm({
   initial,
   defaultVehicle = "kia",
   persistDraft = false,
+  lastOdoByVehicle = {},
   onSubmit,
   onCancel,
   onDelete,
@@ -34,7 +36,15 @@ export default function ShiftForm({
 }) {
   const [i] = useState(() => initial || (persistDraft && loadDraft()) || {});
   const [vehiculo, setVehiculo] = useState(i.vehiculo || defaultVehicle);
-  const [odoInicio, setOdoInicio] = useState(i.odoInicio != null ? String(i.odoInicio) : "");
+  // Turno nuevo: el inicio arranca donde se quedó ese carro la última vez.
+  const lastOdo = (v) => (lastOdoByVehicle[v] != null ? String(lastOdoByVehicle[v]) : "");
+  const [odoInicio, setOdoInicio] = useState(() =>
+    i.odoInicio != null && i.odoInicio !== ""
+      ? String(i.odoInicio)
+      : persistDraft && !initial
+        ? lastOdo(i.vehiculo || defaultVehicle)
+        : ""
+  );
   const [odoFin, setOdoFin] = useState(i.odoFin != null ? String(i.odoFin) : "");
   const [plataforma, setPlataforma] = useState(i.plataforma || "flex");
   const [fecha, setFecha] = useState(i.fecha || todayISO());
@@ -150,7 +160,14 @@ export default function ShiftForm({
         })}
       </div>
 
-      <VehiclePicker value={vehiculo} onChange={setVehiculo} />
+      <VehiclePicker
+        value={vehiculo}
+        onChange={(v) => {
+          // Si el inicio sigue siendo el que puso la app, sigue al carro elegido.
+          if (persistDraft && (odoInicio === "" || odoInicio === lastOdo(vehiculo))) setOdoInicio(lastOdo(v));
+          setVehiculo(v);
+        }}
+      />
 
       <Field label="Fecha">{input(fecha, setFecha, { type: "date" })}</Field>
 
@@ -173,10 +190,8 @@ export default function ShiftForm({
         <Field label="Propina $">{input(propina, setPropina, { inputMode: "decimal", placeholder: "0" })}</Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Odómetro inicio">{input(odoInicio, setOdoInicio, { inputMode: "decimal", placeholder: "opcional" })}</Field>
-        <Field label="Odómetro fin">{input(odoFin, setOdoFin, { inputMode: "decimal", placeholder: "opcional" })}</Field>
-      </div>
+      <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={setOdoInicio} />
+      <OdometerWheel label="Odómetro al llegar" value={odoFin} onChange={setOdoFin} base={odoInicio} />
       {odoMillas != null ? (
         <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
           {odoMillas} millas (del odómetro)
