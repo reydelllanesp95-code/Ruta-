@@ -35,9 +35,15 @@ function DigitWheel({ digit, index, muted, onSelect, label }) {
       className="odometer-digit gc-code min-w-0 flex-1 text-center rounded-lg"
       style={{ height: ROW * 3, overflowY: 'auto', scrollSnapType: 'y mandatory', overscrollBehaviorY: 'contain', scrollbarWidth: 'none', touchAction: 'pan-y', backgroundColor: T.surfaceRaised, border: `1px solid ${T.border}`, color: muted ? T.textFaint : T.textPrimary, maskImage: 'linear-gradient(transparent, black 33%, black 67%, transparent)' }}>
       <div style={{ height: ROW }} aria-hidden="true" />
-      {Array.from({ length: 30 }, (_, n) => (
-        <div key={n} aria-hidden="true" style={{ height: ROW, lineHeight: `${ROW}px`, scrollSnapAlign: 'center', fontSize: 36, fontWeight: 700 }}>{n % 10}</div>
-      ))}
+      {Array.from({ length: 30 }, (_, n) => {
+        const selected = n % 10 === Number(digit);
+        return <div key={n} aria-hidden="true" style={{
+          height: ROW, lineHeight: `${ROW}px`, scrollSnapAlign: 'center',
+          fontSize: selected ? 36 : 24, fontWeight: selected ? 700 : 400,
+          color: selected ? (muted ? T.textSecondary : T.textPrimary) : T.textFaint,
+          opacity: selected ? 1 : 0.35,
+        }}>{n % 10}</div>;
+      })}
       <div style={{ height: ROW }} aria-hidden="true" />
     </div>
   );
@@ -61,13 +67,19 @@ export default function OdometerWheel({ label, value, onChange, base = '' }) {
           className="gc-code w-full mt-1 rounded-lg px-3 py-3 text-[24px] outline-none" style={{ backgroundColor: T.surfaceRaised, color: T.textPrimary, border: `1px solid ${T.border}` }} />
       ) : (
         <div className="relative mt-1">
-          <div aria-hidden="true" className="absolute pointer-events-none left-0 right-0 rounded-lg" style={{ top: ROW, height: ROW, backgroundColor: T.surface, borderBlock: `1px solid ${T.border}` }} />
+          <div aria-hidden="true" className="absolute pointer-events-none left-0 right-0 rounded-lg" style={{ top: ROW, height: ROW, zIndex: 1, border: `2px solid ${has ? T.red : T.border}`, boxShadow: `0 0 0 1px ${T.bg}` }} />
           <div className="relative flex gap-1.5">
             {digits.map((d, index) => <DigitWheel key={index} digit={d} index={index} muted={!has} label={label} onSelect={(n) => onChange(setOdometerDigit(shown, index, n))} />)}
           </div>
         </div>
       )}
-      {!typing && <div className="text-[11px] mt-1" style={{ color: T.textFaint }}>Desliza cada número arriba o abajo{!has ? ' · valor sugerido' : ''}</div>}
+      {!typing && <>
+        <div className="flex justify-between items-center gap-2 mt-2 text-[12px]" style={{ color: T.textSecondary }}>
+          <span>{has ? 'Lectura seleccionada' : base !== '' && base != null ? 'Lectura sugerida' : 'Sin lectura seleccionada'}</span>
+          {(has || (base !== '' && base != null)) && <output className="gc-code text-[19px] font-semibold" style={{ color: has ? T.textPrimary : T.textFaint }}>{Number(has ? value : base).toLocaleString('en-US')} mi</output>}
+        </div>
+        <div className="text-[11px] mt-1" style={{ color: T.textFaint }}>Desliza cada número arriba o abajo</div>
+      </>}
     </div>
   );
 }

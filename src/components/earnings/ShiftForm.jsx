@@ -191,7 +191,7 @@ export default function ShiftForm({
                 border: `1px solid ${active ? T.red : T.border}`,
               }}
             >
-              {p === "flex" && <span aria-hidden="true" className="inline-block rounded px-1 mr-1 text-[9px]" style={{ backgroundColor: "#1677C8", color: "white" }}>Flex</span>}{platformLabel(p)}
+              {platformLabel(p)}
             </button>
           );
         })}
