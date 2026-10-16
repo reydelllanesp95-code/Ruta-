@@ -12,7 +12,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg"],
+      includeAssets: ["favicon.svg", "amazon-flex.jpg"],
       // El nuevo service worker toma control de inmediato (sin esperar a que se
       // cierren todas las pestañas) y limpia cachés viejas → el build nuevo
       // reemplaza al viejo en la PWA instalada, evitando quedarse con una versión
