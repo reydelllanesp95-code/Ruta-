@@ -43,7 +43,8 @@ export function clearDraft(s) {
 // que siempre traen un valor por defecto).
 export function draftHasData(d) {
   if (!d) return false;
-  return ["salidaCasa", "horaInicio", "horaFin", "llegadaCasa", "odoInicio", "odoFin", "millas", "pago", "propina", "nota", "local"].some(
+  if (d.editado === true || d.bloques?.length) return true;
+  return ["salidaCasa", "horaInicio", "horaFin", "llegadaCasa", ...(d.editado === false ? [] : ["odoInicio"]), "odoFin", "millas", "pago", "propina", "nota", "local"].some(
     (k) => d[k] != null && String(d[k]).trim() !== ""
   );
 }
