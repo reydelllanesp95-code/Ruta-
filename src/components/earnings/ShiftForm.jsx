@@ -66,6 +66,7 @@ export default function ShiftForm({
   const [bloques, setBloques] = useState(() => initial && i.bloques ? i.bloques.slice(0, -1) : i.bloques || []);
   const [editado, setEditado] = useState(() => Boolean(initial || i.editado || (i.editado == null && draftHasData(i))));
   const [editTimes, setEditTimes] = useState(Boolean(initial));
+  const [correctInitialOdo, setCorrectInitialOdo] = useState(false);
   const multi = bloques.length > 0;
   const currentBlock = () => ({ horaInicio, horaFin, pago, propina });
   const allBlocks = () => [...bloques, currentBlock()];
@@ -75,6 +76,7 @@ export default function ShiftForm({
   function advance() {
     if (!stage) return;
     ({ salidaCasa: setSalidaCasa, horaInicio: setHoraInicio, horaFin: setHoraFin, llegadaCasa: setLlegadaCasa })[stage.field](nowHHMM());
+    setCorrectInitialOdo(false);
     setEditado(true);
   }
   function cancelNewBlock() {
@@ -233,14 +235,29 @@ export default function ShiftForm({
         </Field>
       )}
 
-      {!initial && !esLimpieza && <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={(v) => { setOdoInicio(v); setEditado(true); }} />}
-      {!initial && !esLimpieza && stage && (
+      {!initial && !esLimpieza && (
+        salidaCasa && !correctInitialOdo ? (
+          <div className="rounded-lg p-3" style={{ backgroundColor: T.surfaceRaised, border: `1px solid ${T.border}` }}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>Odómetro inicial · fijado</span>
+              <button type="button" onClick={() => setCorrectInitialOdo(true)} className="text-[12px] py-2" style={{ color: T.textSecondary }} aria-label="Corregir odómetro inicial">Corregir</button>
+            </div>
+            <output className="gc-code text-[24px] font-semibold" style={{ color: T.textPrimary }}>{odoInicio !== "" ? `${Number(odoInicio).toLocaleString('en-US')} mi` : "Sin registrar"}</output>
+          </div>
+        ) : (
+          <div>
+            <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={(v) => { setOdoInicio(v); setEditado(true); }} />
+            {salidaCasa && <button type="button" onClick={() => setCorrectInitialOdo(false)} className="w-full rounded-lg py-2 mt-2 text-[13px]" style={inputStyle}>Fijar odómetro inicial</button>}
+          </div>
+        )
+      )}
+      {!initial && !esLimpieza && stage && stage.field !== "llegadaCasa" && (
         <div>
           <button type="button" onClick={advance} className="w-full rounded-xl py-4 text-[20px] font-semibold" style={{ backgroundColor: T.red, color: "#fff" }}>{stage.label}</button>
           <p className="text-center text-[11px] mt-1" style={{ color: T.textFaint }}>Guarda la hora actual</p>
-          {horaFin && !llegadaCasa && <button type="button" onClick={addBlock} className="w-full rounded-lg py-3 mt-2 text-[14px]" style={inputStyle}>Añadir otro bloque</button>}
         </div>
       )}
+      {!initial && !esLimpieza && horaFin && !llegadaCasa && <button type="button" onClick={addBlock} className="w-full rounded-lg py-3 text-[14px]" style={inputStyle}>Añadir otro bloque</button>}
       {multi && <div className="space-y-2">
         {bloques.map((b, index) => <div key={index} className="rounded-lg p-2" style={{ border: `1px solid ${T.border}` }}>
           <div className="text-[12px] mb-1" style={{ color: T.textSecondary }}>Bloque {index + 1}</div>
@@ -277,6 +294,12 @@ export default function ShiftForm({
 
       {(initial || esLimpieza) && <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={(v) => { setOdoInicio(v); setEditado(true); }} />}
       <OdometerWheel label="Odómetro al llegar" value={odoFin} onChange={(v) => { setOdoFin(v); setEditado(true); }} base={odoInicio} />
+      {!initial && !esLimpieza && stage?.field === "llegadaCasa" && (
+        <div>
+          <button type="button" onClick={advance} className="w-full rounded-xl py-4 text-[20px] font-semibold" style={{ backgroundColor: T.red, color: "#fff" }}>{stage.label}</button>
+          <p className="text-center text-[11px] mt-1" style={{ color: T.textFaint }}>Guarda la hora actual</p>
+        </div>
+      )}
       {odoMillas != null ? (
         <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
           {odoMillas} millas (del odómetro)
