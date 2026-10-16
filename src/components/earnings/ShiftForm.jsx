@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Save, X, Trash2 } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO } from "../../lib/earnings.js";
-import { ACTIVE_PLATFORMS, platformLabel, validateShift, hoursBetween } from "../../lib/platforms.js";
+import { SHIFT_PLATFORMS, platformLabel, validateShift, hoursBetween } from "../../lib/platforms.js";
 import VehiclePicker from "./VehiclePicker.jsx";
 import OdometerWheel from "./OdometerWheel.jsx";
 import { loadDraft, saveDraft, clearDraft, nowHHMM } from "../../lib/shiftDraft.js";
@@ -29,6 +29,7 @@ export default function ShiftForm({
   defaultVehicle = "kia",
   persistDraft = false,
   lastOdoByVehicle = {},
+  locales = [],
   onSubmit,
   onCancel,
   onDelete,
@@ -56,16 +57,17 @@ export default function ShiftForm({
   const [pago, setPago] = useState(i.pagoBase != null ? String(i.pagoBase) : "");
   const [propina, setPropina] = useState(i.propina ? String(i.propina) : "");
   const [nota, setNota] = useState(i.nota || "");
+  const [local, setLocal] = useState(i.local || "");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!persistDraft) return;
     saveDraft({
       plataforma, vehiculo, fecha, salidaCasa, horaInicio, horaFin, llegadaCasa,
-      odoInicio, odoFin, millas, pago, propina, nota,
+      odoInicio, odoFin, millas, pago, propina, nota, local,
     });
   }, [persistDraft, plataforma, vehiculo, fecha, salidaCasa, horaInicio, horaFin, llegadaCasa,
-    odoInicio, odoFin, millas, pago, propina, nota]);
+    odoInicio, odoFin, millas, pago, propina, nota, local]);
 
   function discard() {
     if (!confirm("¿Borrar lo que llevas apuntado de este turno?")) return;
@@ -105,6 +107,8 @@ export default function ShiftForm({
       ? Math.round((of - oi) * 10) / 10
       : null;
 
+  const esLimpieza = plataforma === "limpieza";
+
   function submit() {
     const input = {
       plataforma,
@@ -120,7 +124,10 @@ export default function ShiftForm({
       vehiculo,
       odoInicio,
       odoFin,
+      local,
     };
+    // Limpieza: sin bloque ni pago (aunque se hubieran escrito antes de cambiar).
+    if (esLimpieza) Object.assign(input, { horaInicio: "", horaFin: "", pago: "", propina: "" });
     const chk = validateShift(input);
     if (!chk.ok) return setError(chk.error);
     setError("");
@@ -139,8 +146,8 @@ export default function ShiftForm({
 
   return (
     <div className="space-y-2.5">
-      <div className="grid grid-cols-3 gap-1.5">
-        {ACTIVE_PLATFORMS.map((p) => {
+      <div className="grid grid-cols-4 gap-1.5">
+        {SHIFT_PLATFORMS.map((p) => {
           const active = p === plataforma;
           return (
             <button
@@ -171,24 +178,55 @@ export default function ShiftForm({
 
       <Field label="Fecha">{input(fecha, setFecha, { type: "date" })}</Field>
 
-      <div className="grid grid-cols-2 gap-2">
-        {timeField("Salí de casa", salidaCasa, setSalidaCasa)}
-        {timeField("Inicio bloque", horaInicio, setHoraInicio)}
-        {timeField("Fin bloque", horaFin, setHoraFin)}
-        {timeField("Llegué a casa", llegadaCasa, setLlegadaCasa)}
-      </div>
+      {esLimpieza && (
+        <Field label="Local">
+          {locales.length > 0 ? (
+            <select
+              value={local}
+              onChange={(e) => setLocal(e.target.value)}
+              className="w-full mt-1 rounded-lg px-3 py-2 text-[14px] outline-none"
+              style={inputStyle}
+            >
+              <option value="">Elige el local…</option>
+              {locales.map((l) => (
+                <option key={l.id || l.nombre} value={l.nombre}>
+                  {l.nombre}
+                </option>
+              ))}
+            </select>
+          ) : (
+            input(local, setLocal, { placeholder: "Añade tus locales en Limpiezas" })
+          )}
+        </Field>
+      )}
+
+      {esLimpieza ? (
+        <div className="grid grid-cols-2 gap-2">
+          {timeField("Salí de casa", salidaCasa, setSalidaCasa)}
+          {timeField("Llegué a casa", llegadaCasa, setLlegadaCasa)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {timeField("Salí de casa", salidaCasa, setSalidaCasa)}
+          {timeField("Inicio bloque", horaInicio, setHoraInicio)}
+          {timeField("Fin bloque", horaFin, setHoraFin)}
+          {timeField("Llegué a casa", llegadaCasa, setLlegadaCasa)}
+        </div>
+      )}
       <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
         {horasReales != null
-          ? `${horasReales} h reales (puerta a puerta)${horas != null ? ` · ${horas} h de bloque` : ""}`
-          : horas != null
+          ? `${horasReales} h reales (puerta a puerta)${!esLimpieza && horas != null ? ` · ${horas} h de bloque` : ""}`
+          : !esLimpieza && horas != null
             ? `${horas} h de bloque · pon salida y llegada para tu $/hora real`
             : "Sin horas no se puede calcular tu $/hora"}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Pago $">{input(pago, setPago, { inputMode: "decimal", placeholder: "0" })}</Field>
-        <Field label="Propina $">{input(propina, setPropina, { inputMode: "decimal", placeholder: "0" })}</Field>
-      </div>
+      {!esLimpieza && (
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Pago $">{input(pago, setPago, { inputMode: "decimal", placeholder: "0" })}</Field>
+          <Field label="Propina $">{input(propina, setPropina, { inputMode: "decimal", placeholder: "0" })}</Field>
+        </div>
+      )}
 
       <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={setOdoInicio} />
       <OdometerWheel label="Odómetro al llegar" value={odoFin} onChange={setOdoFin} base={odoInicio} />

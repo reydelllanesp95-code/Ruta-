@@ -15,6 +15,7 @@ export const KEY_FUELUPS = "ruta_fuelups_v1"; // historial de llenados de gasoli
 export const KEY_MAINT = "ruta_maint_v1"; // historial de mantenimiento
 export const KEY_MEALS = "ruta_meals_v1"; // gastos de comida del día de trabajo
 export const KEY_TOLLS = "ruta_tolls_v1"; // peajes (SunPass / E-PASS)
+export const KEY_LOCALES = "ruta_locales_v1"; // locales de limpieza (facturación y fees de Corvus)
 export const KEY_SHIFT_DRAFT = "ruta_turno_en_curso_v1"; // borrador del turno que se está apuntando
 
 // Tipos de mantenimiento (reutilizable en UI y validación).
@@ -61,3 +62,8 @@ export const DEFAULT_CONFIG = {
   tucson_maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT,
   pay_week_start_day: PAY_WEEK_START_DEFAULT,
 };
+
+// Fees de Corvus sobre lo facturado (royalty 10% + administración 10% + seguro
+// 7.25%), sacados del statement de septiembre 2026. Editable por local; sin
+// confirmar con Corvus que sea igual para todas las cuentas.
+export const CORVUS_FEE_PCT_DEFAULT = 27.25;

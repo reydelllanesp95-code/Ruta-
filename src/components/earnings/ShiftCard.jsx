@@ -7,7 +7,8 @@ import { vehicleOf, vehicleLabel } from "../../lib/vehicles.js";
 import ShiftForm from "./ShiftForm.jsx";
 
 // Tarjeta de un turno manual (Flex / Spark / Otro).
-export default function ShiftCard({ route, config, onSave, onDelete }) {
+export default function ShiftCard({ route, config, locales = [], onSave, onDelete }) {
+  const limpieza = route.plataforma === "limpieza";
   const [editing, setEditing] = useState(false);
   const eco = routeEconomics(route, config);
   const horasBloque = Number(route.horas) > 0 ? Number(route.horas) : null;
@@ -36,6 +37,7 @@ export default function ShiftCard({ route, config, onSave, onDelete }) {
               style={{ backgroundColor: T.surfaceRaised, color: T.textSecondary }}
             >
               {platformLabel(route.plataforma)}
+              {limpieza && route.local ? ` · ${route.local}` : ""}
             </span>
           </div>
           <div className="flex items-center gap-3 text-[12.5px] mt-1" style={{ color: T.textSecondary }}>
@@ -69,7 +71,7 @@ export default function ShiftCard({ route, config, onSave, onDelete }) {
         </div>
         <div className="text-right shrink-0">
           <div className="gc-code text-[17px] font-semibold" style={{ color: T.ok }}>
-            {formatMoney(route.ganancia)}
+            {limpieza ? (horasReales ? `${horasReales} h` : "—") : formatMoney(route.ganancia)}
           </div>
           {!editing && (
             <button
@@ -84,8 +86,17 @@ export default function ShiftCard({ route, config, onSave, onDelete }) {
       </div>
 
       <div className="mt-3 pt-3 grid grid-cols-4 gap-1" style={{ borderTop: `1px solid ${T.borderSoft}` }}>
-        <Metric label="Neto" value={formatMoney(eco.net_profit)} color={eco.net_profit >= 0 ? T.ok : T.red} strong />
-        <Metric label="Neto/h" value={porHora != null ? formatMoney(porHora) : "—"} color={T.textPrimary} />
+        {limpieza ? (
+          <>
+            <Metric label="Costo viaje" value={formatMoney(eco.fuel_cost + eco.maintenance_est)} color={T.textPrimary} strong />
+            <Metric label="Millas" value={String(route.millas)} color={T.textPrimary} />
+          </>
+        ) : (
+          <>
+            <Metric label="Neto" value={formatMoney(eco.net_profit)} color={eco.net_profit >= 0 ? T.ok : T.red} strong />
+            <Metric label="Neto/h" value={porHora != null ? formatMoney(porHora) : "—"} color={T.textPrimary} />
+          </>
+        )}
         <Metric label="− Gas" value={formatMoney(eco.fuel_cost)} color={T.textSecondary} />
         <Metric label="− Mant" value={formatMoney(eco.maintenance_est)} color={T.textSecondary} />
       </div>
@@ -93,6 +104,7 @@ export default function ShiftCard({ route, config, onSave, onDelete }) {
       {editing && (
         <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${T.borderSoft}` }}>
           <ShiftForm
+            locales={locales}
             initial={route}
             onSubmit={(input) => {
               onSave(input);
