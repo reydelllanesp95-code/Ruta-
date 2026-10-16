@@ -58,6 +58,11 @@ export default function ShiftCard({ route, config, locales = [], onSave, onDelet
               {tramo}
             </div>
           )}
+          {route.bloques?.length > 0 && (
+            <div className="text-[12px] mt-2 space-y-1" style={{ color: T.textSecondary }}>
+              {route.bloques.map((b, index) => <div key={index}>Bloque {index + 1}: {b.horaInicio}–{b.horaFin} · {formatMoney(b.pago)} + {formatMoney(b.propina)} propina</div>)}
+            </div>
+          )}
           {route.propina > 0 && (
             <div className="flex items-center gap-1 text-[12px] mt-0.5" style={{ color: T.textFaint }}>
               <HandCoins size={12} /> {formatMoney(route.pagoBase)} pago + {formatMoney(route.propina)} propina
