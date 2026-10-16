@@ -185,7 +185,7 @@ export default function ShiftForm({
               type="button"
               disabled={locked && p !== plataforma}
               onClick={() => { setPlataforma(p); setEditado(true); }}
-              className="rounded-lg py-2 text-[12.5px] font-medium"
+              className="rounded-lg py-2 px-1 text-[12.5px] font-medium min-h-[64px] flex flex-col items-center justify-center gap-1"
               style={{
                 opacity: locked && !active ? 0.45 : 1,
                 backgroundColor: active ? T.red : T.surfaceRaised,
@@ -193,7 +193,8 @@ export default function ShiftForm({
                 border: `1px solid ${active ? T.red : T.border}`,
               }}
             >
-              {platformLabel(p)}
+              {p === "flex" && <img src={`${import.meta.env.BASE_URL}amazon-flex.jpg`} width={24} height={24} alt="" aria-hidden="true" className="rounded-md shrink-0" />}
+              <span className="leading-tight">{platformLabel(p)}</span>
             </button>
           );
         })}
