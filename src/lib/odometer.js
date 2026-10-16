@@ -27,3 +27,11 @@ export function stepOdometer(value, k, dir) {
   const next = base + (dir > 0 ? 1 : -1) * 10 ** k;
   return next < 0 ? 0 : next;
 }
+
+// Cada rueda cambia solo su dígito; 9→0 nunca modifica la vecina.
+export function setOdometerDigit(value, index, digit) {
+  const digits = String(Math.max(0, Math.trunc(Number(value) || 0))).padStart(6, "0").split("");
+  if (!Number.isInteger(index) || index < 0 || index >= digits.length) return String(value);
+  digits[index] = String(((Math.trunc(digit) % 10) + 10) % 10);
+  return String(Number(digits.join("")));
+}

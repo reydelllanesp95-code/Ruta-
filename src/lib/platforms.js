@@ -4,6 +4,7 @@
 // campos opcionales extra, así no hace falta migrar datos: una ruta vieja sin
 // `plataforma` se considera OnTrac (todas las rutas CSV vinieron de OnTrac).
 
+import { summarizeBlocks } from "./guidedShift.js";
 import { SCHEMA_VERSION } from "./constants.js";
 import { makeUUID, round2, validateNonNegative, parseDatePart } from "./earnings.js";
 import { VEHICLES, DEFAULT_VEHICLE } from "./vehicles.js";
@@ -59,7 +60,13 @@ export function hoursBetween(inicio, fin) {
 
 // Valida la entrada del formulario de turno. Devuelve { ok, error, values }.
 export function validateShift(input) {
-  const i = input || {};
+  let i = input || {};
+  let summary = null;
+  if (i.bloques != null && i.plataforma !== "limpieza") {
+    summary = summarizeBlocks(i.bloques, i.salidaCasa, i.llegadaCasa);
+    if (!summary.ok) return summary;
+    i = { ...i, pago: summary.pago, propina: summary.propina, horaInicio: summary.horaInicio, horaFin: summary.horaFin };
+  }
   if (!SHIFT_PLATFORMS.includes(i.plataforma)) {
     return { ok: false, error: "Elige una plataforma." };
   }
@@ -125,6 +132,7 @@ export function validateShift(input) {
   return {
     ok: true,
     values: {
+      ...(summary ? { bloques: summary.bloques, horasBloques: summary.horas } : {}),
       plataforma: i.plataforma,
       fecha,
       pago: pago.value,
@@ -150,7 +158,8 @@ function shiftFields(v, nota) {
     fecha: v.fecha,
     horaInicio: v.horaInicio,
     horaFin: v.horaFin,
-    horas: hoursBetween(v.horaInicio, v.horaFin),
+    ...(v.bloques ? { bloques: v.bloques } : {}),
+    horas: v.horasBloques ?? hoursBetween(v.horaInicio, v.horaFin),
     salidaCasa: v.salidaCasa,
     llegadaCasa: v.llegadaCasa,
     local: v.local,
