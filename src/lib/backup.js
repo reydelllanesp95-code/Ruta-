@@ -1,6 +1,6 @@
 // Respaldo: exportar/importar toda la app como JSON. [Aud 13][Aud 14]
 
-import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, SCHEMA_VERSION } from "./constants.js";
+import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { SHIFT_CSV_HEADER } from "./platforms.js";
@@ -17,11 +17,12 @@ export async function buildBackup() {
   const mantenimiento = (await loadJSON(KEY_MAINT, [])) || [];
   const comidas = (await loadJSON(KEY_MEALS, [])) || [];
   const peajes = (await loadJSON(KEY_TOLLS, [])) || [];
+  const locales = (await loadJSON(KEY_LOCALES, [])) || [];
   return {
     type: BACKUP_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportadoEn: new Date().toISOString(),
-    data: { codigos, rutas, config, fuelups, mantenimiento, comidas, peajes },
+    data: { codigos, rutas, config, fuelups, mantenimiento, comidas, peajes, locales },
   };
 }
 
@@ -68,6 +69,9 @@ export async function restoreBackup(jsonText) {
   // peajes opcional: backups viejos (sin peajes) → [].
   const peajes = Array.isArray(parsed.data.peajes) ? parsed.data.peajes : [];
   await saveJSON(KEY_TOLLS, peajes);
+  // locales opcional: backups viejos (sin locales) → [].
+  const locales = Array.isArray(parsed.data.locales) ? parsed.data.locales : [];
+  await saveJSON(KEY_LOCALES, locales);
   return {
     codigos: codigos.length,
     rutas: rutas.length,
@@ -76,6 +80,7 @@ export async function restoreBackup(jsonText) {
     mantenimiento: mantenimiento.length,
     comidas: comidas.length,
     peajes: peajes.length,
+    locales: locales.length,
   };
 }
 

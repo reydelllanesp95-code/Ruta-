@@ -13,7 +13,9 @@ import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
 import { lastOdometer } from "../lib/odometer.js";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, DEFAULT_CONFIG } from "../lib/constants.js";
+import CleaningPanel from "./earnings/CleaningPanel.jsx";
+import { sanitizeLocal } from "../lib/cleaning.js";
 import * as storage from "../lib/storage.js";
 import { parseRoutes, parseCSV, normalizeHeader } from "../lib/parseRoutes.js";
 import { dropEmptyRows } from "../lib/csv.js";
@@ -53,6 +55,7 @@ import {
   isShift,
   isShiftsCSVHeader,
   parseShiftRows,
+  deliveryOnly,
 } from "../lib/platforms.js";
 
 export default function Earnings() {
@@ -62,6 +65,7 @@ export default function Earnings() {
   const [maints, setMaints] = useState([]);
   const [meals, setMeals] = useState([]);
   const [tolls, setTolls] = useState([]);
+  const [locales, setLocales] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -77,15 +81,17 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt, ml, tl] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
         storage.loadJSON(KEY_MEALS, []),
         storage.loadJSON(KEY_TOLLS, []),
+        storage.loadJSON(KEY_LOCALES, []),
       ]);
       if (mounted) {
+        setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
         setTolls(Array.isArray(tl) ? tl : []);
         setRoutes(Array.isArray(data) ? data : []);
         setConfig(cfg);
@@ -163,6 +169,14 @@ export default function Earnings() {
   }
   const addToll = (input) => persistTolls([...tolls, makeToll(input)]);
   const importTolls = (list) => list.length && persistTolls([...tolls, ...list]);
+
+  function saveLocales(list) {
+    setLocales(list);
+    storage.saveJSON(KEY_LOCALES, list).then(
+      () => setMsg({ tipo: "ok", texto: "Locales guardados." }),
+      (err) => setMsg({ tipo: "error", texto: "No se pudieron guardar los locales: " + (err.message || err) })
+    );
+  }
   const deleteToll = (id) => persistTolls(tolls.filter((t) => t.id !== id));
 
   // Config de costos POR VEHÍCULO: MPG real con sus propios llenados (o el
@@ -176,7 +190,8 @@ export default function Earnings() {
 
   // Agregaciones memoizadas: recalculan al cambiar rutas o los costos. [Aud 16]
   const agg = useMemo(
-    () => aggregate(routes, config, platformOf, configFor),
+    // Solo reparto: las limpiezas van en su propio panel.
+    () => aggregate(deliveryOnly(routes), config, platformOf, configFor),
     [routes, config, configFor]
   );
 
@@ -322,15 +337,17 @@ export default function Earnings() {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt, ml, tl] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
         storage.loadJSON(KEY_MAINT, []),
         storage.loadJSON(KEY_MEALS, []),
         storage.loadJSON(KEY_TOLLS, []),
+        storage.loadJSON(KEY_LOCALES, []),
       ]);
       setTolls(Array.isArray(tl) ? tl : []);
+      setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
       setRoutes(Array.isArray(data) ? data : []);
       setConfig(cfg);
       setFuelups(Array.isArray(fu) ? fu : []);
@@ -423,6 +440,7 @@ export default function Earnings() {
             </div>
             <ShiftForm
               persistDraft
+              locales={locales}
               lastOdoByVehicle={Object.fromEntries(
                 VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints })])
               )}
@@ -487,6 +505,8 @@ export default function Earnings() {
           onAdd={addMeal}
           onDelete={deleteMeal}
         />
+
+        <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
 
         <TollsPanel
           tolls={tolls}
@@ -553,6 +573,7 @@ export default function Earnings() {
                     key={r.id}
                     route={r}
                     config={configFor(r)}
+                    locales={locales}
                     onSave={(input) => editShift(r.id, input)}
                     onDelete={deleteRoute}
                   />

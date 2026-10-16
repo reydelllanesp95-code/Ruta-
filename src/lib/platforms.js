@@ -13,10 +13,20 @@ export const PLATFORMS = {
   spark: { label: "Spark Driver", archived: false },
   otro: { label: "Otro", archived: false },
   ontrac: { label: "OnTrac", archived: true },
+  // Viajes a limpiar (EverOP). No es reparto: va aparte de las ganancias.
+  limpieza: { label: "Limpieza", archived: false, cleaning: true },
 };
 
-// Plataformas que se ofrecen al registrar un turno nuevo.
-export const ACTIVE_PLATFORMS = Object.keys(PLATFORMS).filter((k) => !PLATFORMS[k].archived);
+// Plataformas de REPARTO activas (sin las archivadas ni limpieza).
+export const ACTIVE_PLATFORMS = Object.keys(PLATFORMS).filter(
+  (k) => !PLATFORMS[k].archived && !PLATFORMS[k].cleaning
+);
+// Lo que se puede elegir al apuntar un turno: reparto + limpieza.
+export const SHIFT_PLATFORMS = [...ACTIVE_PLATFORMS, "limpieza"];
+
+export function isCleaning(route) {
+  return Boolean(route && route.plataforma === "limpieza");
+}
 
 export function platformOf(route) {
   const p = route && route.plataforma;
@@ -50,12 +60,14 @@ export function hoursBetween(inicio, fin) {
 // Valida la entrada del formulario de turno. Devuelve { ok, error, values }.
 export function validateShift(input) {
   const i = input || {};
-  if (!ACTIVE_PLATFORMS.includes(i.plataforma)) {
+  if (!SHIFT_PLATFORMS.includes(i.plataforma)) {
     return { ok: false, error: "Elige una plataforma." };
   }
+  const limpieza = i.plataforma === "limpieza";
   const fecha = parseDatePart(i.fecha);
   if (!fecha) return { ok: false, error: "La fecha no es válida." };
-  if (i.pago === "" || i.pago == null) return { ok: false, error: "Escribe el pago." };
+  // En limpieza no hay pago por viaje (Corvus paga al mes): pago vacío = 0.
+  if (!limpieza && (i.pago === "" || i.pago == null)) return { ok: false, error: "Escribe el pago." };
   const pago = validateNonNegative(i.pago, "El pago");
   if (!pago.ok) return { ok: false, error: pago.error };
   const propina = validateNonNegative(i.propina, "La propina");
@@ -125,6 +137,7 @@ export function validateShift(input) {
       horaFin: hayFin ? i.horaFin : "",
       salidaCasa: haySalida ? i.salidaCasa : "",
       llegadaCasa: hayLlegada ? i.llegadaCasa : "",
+      local: limpieza ? String(i.local || "").trim() : "",
     },
   };
 }
@@ -140,6 +153,7 @@ function shiftFields(v, nota) {
     horas: hoursBetween(v.horaInicio, v.horaFin),
     salidaCasa: v.salidaCasa,
     llegadaCasa: v.llegadaCasa,
+    local: v.local,
     // Horas reales (puerta a puerta) si hay salida/llegada; si no, null.
     horasReales: hoursBetween(v.salidaCasa, v.llegadaCasa),
     millas: v.millas,
@@ -191,6 +205,7 @@ const PLATFORM_ALIASES = {
   flex: "flex", "amazon flex": "flex", amazon: "flex",
   spark: "spark", "spark driver": "spark", walmart: "spark",
   otro: "otro", other: "otro",
+  limpieza: "limpieza", cleaning: "limpieza",
 };
 const VEHICLE_ALIASES = { kia: "kia", sorento: "kia", "kia sorento": "kia", tucson: "tucson", hyundai: "tucson", "hyundai tucson": "tucson" };
 
@@ -230,6 +245,7 @@ export function parseShiftRows(rows, existentes = []) {
       horaFin: get(row, "fin"),
       salidaCasa: get(row, "salida"),
       llegadaCasa: get(row, "llegada"),
+      local: get(row, "local"),
       pago: get(row, "pago").replace(/[$,]/g, ""),
       propina: get(row, "propina").replace(/[$,]/g, ""),
       millas: get(row, "millas"),
@@ -251,4 +267,9 @@ export function parseShiftRows(rows, existentes = []) {
     shifts.push(s);
   }
   return { shifts, omitidas, duplicados };
+}
+
+// Solo reparto (sin limpiezas): lo que cuentan las ganancias y el neto/hora.
+export function deliveryOnly(routes) {
+  return (routes || []).filter((r) => !isCleaning(r));
 }
