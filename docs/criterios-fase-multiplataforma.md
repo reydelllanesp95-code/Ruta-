@@ -91,3 +91,19 @@ Escritos antes de implementar. No se cambian tras ver resultados.
 5. Sigue habiendo forma de escribir el número a mano.
 6. Todo esto entra en el borrador del turno en curso (no se pierde al cerrar la app).
 7. `npm test` en verde (129 previos + nuevos) y `npm run build` OK.
+
+---
+
+# Fase F: limpiezas (EverOP / Corvus)
+
+Pedido de Rey (15-oct-2026): registrar las salidas a limpiar (hora de salida, hora de vuelta y millas) para los taxes, y saber cuánto gana de verdad por hora en cada local después de los fees y descuentos de Corvus.
+
+Escritos antes de implementar. No se cambian tras ver resultados.
+
+1. Nueva plataforma **Limpieza**. Al elegirla, el turno pide solo: local, salí de casa, llegué a casa, odómetro/millas y nota. Sin pago, propina ni horas de bloque (no son obligatorios para limpieza).
+2. Las limpiezas **no se mezclan** con las ganancias de reparto: las tarjetas de semana/mes, el neto/hora y "Por plataforma" de reparto dan exactamente lo mismo con o sin limpiezas guardadas (test).
+3. **Mis locales** (se guarda en el teléfono, nunca en el código del repo porque es público): nombre, facturación mensual, % de fees de Corvus (por defecto 27.25, editable) y cuota de Finder's Fee al mes.
+4. **Resumen de limpiezas por mes** y por local: visitas, horas (salida→llegada), millas, costo de los viajes (gas + mantenimiento del carro usado), neto de Corvus = facturación × (1 − fees%) − cuota, neto real = neto de Corvus − costo de viajes, y **$/hora real** = neto real / horas. Sin horas → "—"; local sin datos de pago → se avisa, no se inventa (test con números hechos a mano).
+5. Total de **millas de limpieza** del mes y del año visible (para los taxes).
+6. Los locales entran en el respaldo (exportar/importar).
+7. `npm test` en verde (135 previos + nuevos) y `npm run build` OK.
