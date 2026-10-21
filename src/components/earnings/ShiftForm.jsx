@@ -65,7 +65,6 @@ export default function ShiftForm({
   const [error, setError] = useState("");
   const [bloques, setBloques] = useState(() => initial && i.bloques ? i.bloques.slice(0, -1) : i.bloques || []);
   const [editado, setEditado] = useState(() => Boolean(initial || i.editado || (i.editado == null && draftHasData(i))));
-  const [editTimes, setEditTimes] = useState(Boolean(initial));
   const [correctInitialOdo, setCorrectInitialOdo] = useState(false);
   const multi = bloques.length > 0;
   const currentBlock = () => ({ horaInicio, horaFin, pago, propina });
@@ -268,11 +267,14 @@ export default function ShiftForm({
         </div>)}
         <div className="flex justify-between gap-2 text-[12px]" style={{ color: T.textSecondary }}><span>Bloque {bloques.length + 1} · actual</span>{!initial && !llegadaCasa && <button type="button" onClick={cancelNewBlock}>Volver al bloque anterior</button>}</div>
       </div>}
-      {!initial && !esLimpieza && <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: T.surfaceRaised }}>
-        <div className="flex justify-between text-[12px]" style={{ color: T.textSecondary }}><span>Horas registradas</span><button type="button" onClick={() => setEditTimes(!editTimes)}> {editTimes ? "Listo" : "Corregir horas"}</button></div>
-        {[["Salí de casa", salidaCasa], ["Inicio del bloque", horaInicio], ["Fin del bloque", horaFin], ["Llegué a casa", llegadaCasa]].map(([label, value]) => <div key={label} className="flex justify-between text-[13px]" style={{ color: value ? T.textPrimary : T.textFaint }}><span>{label}</span><span>{value || "Pendiente"}</span></div>)}
+      {!initial && !esLimpieza && <div className="rounded-lg p-3 space-y-1.5" style={{ backgroundColor: T.surfaceRaised }}>
+        <div className="text-[12px]" style={{ color: T.textSecondary }}>Horas registradas · toca una hora para corregirla</div>
+        {[["Salí de casa", salidaCasa, setSalidaCasa], ["Inicio del bloque", horaInicio, setHoraInicio], ["Fin del bloque", horaFin, setHoraFin], ["Llegué a casa", llegadaCasa, setLlegadaCasa]].map(([label, value, set]) => <label key={label} className="flex items-center justify-between gap-2 text-[13px]" style={{ color: value ? T.textPrimary : T.textFaint }}>
+          <span>{label}</span>
+          <input type="time" aria-label={label} value={value} onChange={(e) => set(e.target.value)} className="gc-code rounded-lg px-2 py-1.5 text-[14px] outline-none w-[7.5rem]" style={{ ...inputStyle, opacity: value ? 1 : 0.6 }} />
+        </label>)}
       </div>}
-      {(initial || esLimpieza || editTimes) && <div className="grid grid-cols-2 gap-2">
+      {(initial || esLimpieza) && <div className="grid grid-cols-2 gap-2">
         {timeField("Salí de casa", salidaCasa, setSalidaCasa)}
         {!esLimpieza && timeField("Inicio bloque", horaInicio, setHoraInicio)}
         {!esLimpieza && timeField("Fin bloque", horaFin, setHoraFin)}

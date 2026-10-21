@@ -15,6 +15,15 @@ export function nextStage({ salidaCasa, horaInicio, horaFin, llegadaCasa }) {
   return { field: 'llegadaCasa', label: 'Llegué a casa' };
 }
 
+// Dice qué hora hay que corregir, porque lo normal es haber marcado algo tarde.
+function blockError(index, b, previous, overlaps, salidaCasa, llegadaCasa) {
+  const name = `El bloque ${index + 1} (${b.horaInicio}–${b.horaFin})`;
+  if (overlaps) return `${name} empieza antes de que termine el bloque ${index} (${previous.horaFin}). Corrige uno de los dos.`;
+  if (!salidaCasa) return `${name} no cuadra con los otros bloques (máximo 24 h).`;
+  const llegada = llegadaCasa ? ` y llegaste a las ${llegadaCasa}` : '';
+  return `${name} queda fuera de tu jornada: saliste de casa a las ${salidaCasa}${llegada}. Corrige «Salí de casa»${llegadaCasa ? ' o «Llegué a casa»' : ''}.`;
+}
+
 export function summarizeBlocks(blocks, salidaCasa = '', llegadaCasa = '') {
   if (!Array.isArray(blocks) || !blocks.length) return { ok: false, error: 'Añade al menos un bloque.' };
   const origin = minutes(salidaCasa || blocks[0].horaInicio);
@@ -28,7 +37,7 @@ export function summarizeBlocks(blocks, salidaCasa = '', llegadaCasa = '') {
     const start = minutes(b.horaInicio), finish = minutes(b.horaFin);
     if (start == null || finish == null || start === finish) return { ok: false, error: `Completa las horas del bloque ${index + 1}.` };
     const a = offset(start), z = offset(finish);
-    if (a < previousEnd || z <= a || z > limit) return { ok: false, error: `El bloque ${index + 1} se solapa o queda fuera de la jornada (máximo 24 h).` };
+    if (a < previousEnd || z <= a || z > limit) return { ok: false, error: blockError(index, b, blocks[index - 1], a < previousEnd && a <= limit, salidaCasa, llegadaCasa) };
     if (b.pago === '' || b.pago == null) return { ok: false, error: `Escribe el pago del bloque ${index + 1}.` };
     const p = validateNonNegative(b.pago, 'El pago'), t = validateNonNegative(b.propina, 'La propina');
     if (!p.ok || !t.ok) return { ok: false, error: p.error || t.error };
