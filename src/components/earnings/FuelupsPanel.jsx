@@ -3,6 +3,7 @@ import { Fuel, Plus, Trash2, X, ChevronDown, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO, formatMoney, payWeekLabel, monthLabel } from "../../lib/earnings.js";
 import {
+  tankMpgById,
   validateFuelup,
   maxOdometro,
   avgDaysBetweenFillups,
@@ -38,6 +39,7 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
     setOdometro("");
   }
 
+  const tanques = tankMpgById(fuelups);
   const listado = (fuelups || [])
     .slice()
     .sort((a, b) => Number(b.odometro) - Number(a.odometro));
@@ -156,7 +158,13 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
                     </div>
                     <div className="gc-code text-[11.5px]" style={{ color: T.textFaint }}>
                       odómetro {Number(f.odometro).toLocaleString()}
+                      {tanques[f.id] && ` · ${tanques[f.id].mpg} mpg`}
                     </div>
+                    {tanques[f.id] && !tanques[f.id].plausible && (
+                      <div className="text-[11.5px]" style={{ color: T.revisar }}>
+                        Revisar: imposible para este carro, no cuenta. ¿Tanque no lleno, un llenado sin apuntar u odómetro mal escrito?
+                      </div>
+                    )}
                   </div>
                   <button onClick={() => onDelete(f.id)} aria-label="Eliminar llenado">
                     <Trash2 size={15} style={{ color: T.red }} />

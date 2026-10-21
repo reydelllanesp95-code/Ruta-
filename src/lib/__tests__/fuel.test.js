@@ -3,6 +3,7 @@ import {
   validateFuelup,
   maxOdometro,
   validPairs,
+  tankMpgById,
   realMpg,
   effectiveMpg,
   makeFuelup,
@@ -47,14 +48,14 @@ describe("validPairs / realMpg (tanque a tanque)", () => {
     ];
     expect(realMpg(fu)).toBe(20); // (1200-1000)/10
   });
-  it("ordena por odómetro y promedia; lastN toma los últimos", () => {
+  it("ordena por odómetro; millas totales ÷ galones totales; lastN toma los últimos", () => {
     const fu = [
       { odometro: 1500, galones: 20 }, // desordenado a propósito
       { odometro: 1000, galones: 10 },
       { odometro: 1200, galones: 10 },
     ];
-    // pares: 1000→1200 (20), 1200→1500 (15) → promedio 17.5
-    expect(realMpg(fu)).toBe(17.5);
+    // pares: 1000→1200 (200 mi/10 gal), 1200→1500 (300 mi/20 gal) → 500/30 = 16.7
+    expect(realMpg(fu)).toBe(16.7);
     expect(realMpg(fu, 1)).toBe(15); // último par
   });
   it("descarta galones=0 y odómetro no creciente", () => {
@@ -66,6 +67,28 @@ describe("validPairs / realMpg (tanque a tanque)", () => {
     ];
     expect(validPairs(fu).length).toBe(1);
     expect(realMpg(fu)).toBe(20);
+  });
+});
+
+describe("tanques imposibles (no lleno / llenado sin apuntar)", () => {
+  // Sintético: tanques normales de ~18 mpg y uno de 400 mi con 7.8 gal (51.3).
+  const fu = [
+    { id: "a", odometro: 10000, galones: 15 },
+    { id: "b", odometro: 10270, galones: 15 }, // 18
+    { id: "c", odometro: 10670, galones: 7.8 }, // 51.3 → no cuenta
+    { id: "d", odometro: 10940, galones: 15 }, // 18
+  ];
+  it("no cuentan para el MPG real y se marcan para revisar", () => {
+    expect(realMpg(fu)).toBe(18);
+    const t = tankMpgById(fu);
+    expect(t.c).toEqual({ mpg: 51.3, plausible: false });
+    expect(t.b.plausible).toBe(true);
+    expect(t.a).toBeUndefined();
+  });
+  it("si todos son imposibles, cae al MPG asumido", () => {
+    const e = effectiveMpg(DEFAULT_CONFIG, fu.slice(1, 3));
+    expect(e.source).toBe("assumed");
+    expect(e.mpg).toBe(DEFAULT_CONFIG.mpg);
   });
 });
 
