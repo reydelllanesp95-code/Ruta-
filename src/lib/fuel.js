@@ -51,9 +51,16 @@ export function maxOdometro(fuelups) {
   return max;
 }
 
+// Rango posible para un carro de calle (un Sorento o Tucson híbrido no pasa de
+// ~40). Fuera de esto casi siempre es un tanque no lleno, un llenado sin apuntar
+// o un odómetro mal escrito: ese tanque no cuenta para el MPG real.
+export const MPG_MIN = 8;
+export const MPG_MAX = 45;
+
 // Pares válidos consecutivos (ordenados por odómetro asc). Cada par mide un
 // tanque: mpg = (odo_actual - odo_anterior) / galones_actual.
 // Descarta: galones<=0, odómetro no creciente. [edge cases del spec]
+// `plausible` = el mpg cae dentro del rango posible.
 export function validPairs(fuelups) {
   const sorted = (fuelups || [])
     .filter((f) => Number.isFinite(Number(f.odometro)))
@@ -66,19 +73,27 @@ export function validPairs(fuelups) {
     const gal = Number(sorted[i].galones);
     if (!(curr > prev)) continue; // odómetro no creciente → par inválido
     if (!Number.isFinite(gal) || gal <= 0) continue; // galones inválidos
-    pairs.push({ millas: curr - prev, galones: gal, mpg: (curr - prev) / gal });
+    const mpg = (curr - prev) / gal;
+    pairs.push({ id: sorted[i].id, millas: curr - prev, galones: gal, mpg, plausible: mpg >= MPG_MIN && mpg <= MPG_MAX });
   }
   return pairs;
 }
 
-// MPG real = promedio de los últimos N pares válidos. Necesita >= 2 fill-ups
-// (>= 1 par). Sin datos suficientes → null (no crashea).
+// MPG de cada tanque por id del llenado que lo cierra (para la lista).
+export function tankMpgById(fuelups) {
+  return Object.fromEntries(validPairs(fuelups).filter((p) => p.id != null).map((p) => [p.id, { mpg: round1(p.mpg), plausible: p.plausible }]));
+}
+
+// MPG real = millas totales ÷ galones totales de los últimos N tanques
+// posibles (un tanque raro pesa según sus galones, no igual que uno lleno).
+// Sin tanques posibles → null (no crashea).
 export function realMpg(fuelups, lastN = Infinity) {
-  const pairs = validPairs(fuelups);
+  const pairs = validPairs(fuelups).filter((p) => p.plausible);
   if (pairs.length === 0) return null;
   const use = lastN === Infinity ? pairs : pairs.slice(-Math.max(1, lastN));
-  const avg = use.reduce((a, p) => a + p.mpg, 0) / use.length;
-  return round1(avg);
+  const millas = use.reduce((a, p) => a + p.millas, 0);
+  const galones = use.reduce((a, p) => a + p.galones, 0);
+  return round1(millas / galones);
 }
 
 // MPG efectivo (DERIVADO, no se persiste): usa el real si hay datos, si no el
