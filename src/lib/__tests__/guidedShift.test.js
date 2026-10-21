@@ -33,6 +33,17 @@ describe('jornada guiada compatible', () => {
       [{ ...blocks[0], horaInicio: '25:00' }],
     ]) expect(() => makeShift({ ...input, bloques: b })).toThrow();
   });
+  it('al marcar tarde, el error dice qué hora corregir', () => {
+    const b = { horaInicio: '08:00', horaFin: '09:30', pago: '50' };
+    const tarde = summarizeBlocks([b], '10:28', '10:28');
+    expect(tarde.ok).toBe(false);
+    expect(tarde.error).toContain('saliste de casa a las 10:28');
+    expect(tarde.error).toContain('Corrige «Salí de casa» o «Llegué a casa»');
+    expect(summarizeBlocks([b], '07:30', '09:00').error).toContain('llegaste a las 09:00');
+    const solape = summarizeBlocks([blocks[0], { ...blocks[1], horaInicio: '08:30' }], '07:30', '12:00');
+    expect(solape.error).toContain('empieza antes de que termine el bloque 1 (09:00)');
+    expect(summarizeBlocks([b], '07:30', '10:28').ok).toBe(true);
+  });
   it('admite medianoche sin contar pausas como bloque', () => {
     const s = summarizeBlocks([{ horaInicio: '23:30', horaFin: '00:30', pago: '15' }, { horaInicio: '01:00', horaFin: '02:00', pago: '25' }], '23:00', '02:30');
     expect(s.ok).toBe(true); expect(s.horas).toBe(2); expect(s.pago).toBe(40);
