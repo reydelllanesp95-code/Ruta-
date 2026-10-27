@@ -3,9 +3,8 @@ import { Fuel, Plus, Trash2, X, ChevronDown, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO, formatMoney, payWeekLabel, monthLabel } from "../../lib/earnings.js";
 import {
-  tankMpgById,
+  fillInfoById,
   validateFuelup,
-  maxOdometro,
   avgDaysBetweenFillups,
   fuelSpendByPeriod,
 } from "../../lib/fuel.js";
@@ -25,13 +24,12 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
   const [odometro, setOdometro] = useState("");
   const [error, setError] = useState("");
 
-  const prevOdo = maxOdometro(fuelups);
   const avgDias = avgDaysBetweenFillups(fuelups);
   const gasto = fuelSpendByPeriod(fuelups, weekStartDow);
 
   function add() {
     setError("");
-    const chk = validateFuelup({ galones, odometro }, prevOdo); // [ajuste 3]
+    const chk = validateFuelup({ galones, odometro, fecha }, fuelups);
     if (!chk.ok) return setError(chk.error);
     onAdd({ fecha, galones, costo, odometro, vehiculo });
     setGalones("");
@@ -39,7 +37,7 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
     setOdometro("");
   }
 
-  const tanques = tankMpgById(fuelups);
+  const tramos = fillInfoById(fuelups);
   const listado = (fuelups || [])
     .slice()
     .sort((a, b) => Number(b.odometro) - Number(a.odometro));
@@ -158,11 +156,11 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
                     </div>
                     <div className="gc-code text-[11.5px]" style={{ color: T.textFaint }}>
                       odómetro {Number(f.odometro).toLocaleString()}
-                      {tanques[f.id] && ` · ${tanques[f.id].mpg} mpg`}
+                      {tramos[f.id] && ` · +${tramos[f.id].millas.toLocaleString()} mi`}
                     </div>
-                    {tanques[f.id] && !tanques[f.id].plausible && (
+                    {tramos[f.id] && tramos[f.id].gap && (
                       <div className="text-[11.5px]" style={{ color: T.revisar }}>
-                        Revisar: imposible para este carro, no cuenta. ¿Tanque no lleno, un llenado sin apuntar u odómetro mal escrito?
+                        Hueco de {tramos[f.id].millas.toLocaleString()} millas: faltan llenados por apuntar. No cuenta para el MPG.
                       </div>
                     )}
                   </div>

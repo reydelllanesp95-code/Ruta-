@@ -3,7 +3,7 @@ import {
   validateFuelup,
   maxOdometro,
   validPairs,
-  tankMpgById,
+  fillInfoById,
   realMpg,
   effectiveMpg,
   makeFuelup,
@@ -13,19 +13,32 @@ import {
 import { DEFAULT_CONFIG } from "../constants.js";
 
 describe("validateFuelup", () => {
+  const fu = [
+    { fecha: "2026-06-01", odometro: 1000, galones: 10 },
+    { fecha: "2026-06-05", odometro: 1300, galones: 10 },
+  ];
   it("galones <= 0 o no numérico → error", () => {
-    expect(validateFuelup({ galones: 0, odometro: 100 }, null).ok).toBe(false);
-    expect(validateFuelup({ galones: "x", odometro: 100 }, null).ok).toBe(false);
+    expect(validateFuelup({ galones: 0, odometro: 100 }, []).ok).toBe(false);
+    expect(validateFuelup({ galones: "x", odometro: 100 }, []).ok).toBe(false);
   });
-  it("odómetro <= anterior → error con aviso claro [ajuste 3]", () => {
-    const r = validateFuelup({ galones: 10, odometro: 900 }, 1000);
-    expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/odómetro/i);
-    expect(validateFuelup({ galones: 10, odometro: 1000 }, 1000).ok).toBe(false); // igual
+  it("primer llenado y llenado nuevo al final → válido", () => {
+    expect(validateFuelup({ galones: 10, odometro: 50, fecha: "2026-06-01" }, []).ok).toBe(true);
+    expect(validateFuelup({ galones: 10, odometro: 1500, fecha: "2026-06-08" }, fu).ok).toBe(true);
   });
-  it("válido cuando crece", () => {
-    expect(validateFuelup({ galones: 10, odometro: 1100 }, 1000).ok).toBe(true);
-    expect(validateFuelup({ galones: 10, odometro: 50 }, null).ok).toBe(true); // primer llenado
+  it("llenado atrasado con odómetro en medio → válido", () => {
+    expect(validateFuelup({ galones: 5, odometro: 1150, fecha: "2026-06-03" }, fu).ok).toBe(true);
+  });
+  it("odómetro que contradice el orden por fecha → error que nombra el llenado", () => {
+    const r1 = validateFuelup({ galones: 5, odometro: 1400, fecha: "2026-06-03" }, fu);
+    expect(r1.ok).toBe(false);
+    expect(r1.error).toMatch(/2026-06-05/);
+    const r2 = validateFuelup({ galones: 5, odometro: 900, fecha: "2026-06-03" }, fu);
+    expect(r2.ok).toBe(false);
+    expect(r2.error).toMatch(/2026-06-01/);
+    expect(validateFuelup({ galones: 5, odometro: 1200, fecha: "2026-06-10" }, fu).ok).toBe(false);
+  });
+  it("odómetro repetido → error", () => {
+    expect(validateFuelup({ galones: 5, odometro: 1300, fecha: "2026-06-06" }, fu).ok).toBe(false);
   });
 });
 
@@ -36,7 +49,7 @@ describe("maxOdometro", () => {
   });
 });
 
-describe("validPairs / realMpg (tanque a tanque)", () => {
+describe("validPairs / realMpg (por tramos)", () => {
   it("0 o 1 llenados → sin MPG (null), no crashea", () => {
     expect(realMpg([])).toBe(null);
     expect(realMpg([{ odometro: 1000, galones: 10 }])).toBe(null);
@@ -46,47 +59,79 @@ describe("validPairs / realMpg (tanque a tanque)", () => {
       { odometro: 1000, galones: 10 },
       { odometro: 1200, galones: 10 },
     ];
-    expect(realMpg(fu)).toBe(20); // (1200-1000)/10
+    expect(realMpg(fu)).toBe(20);
   });
-  it("ordena por odómetro; millas totales ÷ galones totales; lastN toma los últimos", () => {
+  it("ordena por odómetro; millas totales ÷ galones totales", () => {
     const fu = [
-      { odometro: 1500, galones: 20 }, // desordenado a propósito
+      { odometro: 1500, galones: 20 },
       { odometro: 1000, galones: 10 },
       { odometro: 1200, galones: 10 },
     ];
-    // pares: 1000→1200 (200 mi/10 gal), 1200→1500 (300 mi/20 gal) → 500/30 = 16.7
-    expect(realMpg(fu)).toBe(16.7);
-    expect(realMpg(fu, 1)).toBe(15); // último par
+    expect(realMpg(fu)).toBe(16.7); // 500 / 30
   });
   it("descarta galones=0 y odómetro no creciente", () => {
     const fu = [
       { odometro: 1000, galones: 10 },
-      { odometro: 1000, galones: 10 }, // odómetro igual → par inválido
-      { odometro: 1200, galones: 0 }, // galones 0 → par inválido
-      { odometro: 1400, galones: 10 }, // 1200→1400 válido = 20
+      { odometro: 1000, galones: 10 },
+      { odometro: 1200, galones: 0 },
+      { odometro: 1400, galones: 10 },
     ];
     expect(validPairs(fu).length).toBe(1);
     expect(realMpg(fu)).toBe(20);
   });
 });
 
-describe("tanques imposibles (no lleno / llenado sin apuntar)", () => {
-  // Sintético: tanques normales de ~18 mpg y uno de 400 mi con 7.8 gal (51.3).
+describe("llenados parciales de distinto tamaño (criterio 3)", () => {
+  // Sintético a ~22 mpg: unas veces $20, otras $40; cada par suelto da
+  // valores absurdos (hasta 60+), pero el tramo no.
   const fu = [
-    { id: "a", odometro: 10000, galones: 15 },
-    { id: "b", odometro: 10270, galones: 15 }, // 18
-    { id: "c", odometro: 10670, galones: 7.8 }, // 51.3 → no cuenta
-    { id: "d", odometro: 10940, galones: 15 }, // 18
+    { id: "a", odometro: 20000, galones: 5 },
+    { id: "b", odometro: 20090, galones: 5 }, // 18
+    { id: "c", odometro: 20130, galones: 10 }, // 4
+    { id: "d", odometro: 20430, galones: 5 }, // 60
+    { id: "e", odometro: 20560, galones: 7 }, // 18.6
+    { id: "f", odometro: 20640, galones: 5 }, // 16
+    { id: "g", odometro: 20800, galones: 5 }, // 32
   ];
-  it("no cuentan para el MPG real y se marcan para revisar", () => {
-    expect(realMpg(fu)).toBe(18);
-    const t = tankMpgById(fu);
-    expect(t.c).toEqual({ mpg: 51.3, plausible: false });
-    expect(t.b.plausible).toBe(true);
+  it("el MPG real queda entre 20 y 24", () => {
+    const m = realMpg(fu);
+    expect(m).toBeGreaterThanOrEqual(20);
+    expect(m).toBeLessThanOrEqual(24);
+  });
+  it("con más de 1000 millas recientes, ignora lo más viejo", () => {
+    // Al principio, un tramo antiguo a ~10 mpg; luego ~1100 mi a 20 mpg.
+    const largo = [
+      { odometro: 1000, galones: 10 },
+      { odometro: 1300, galones: 30 }, // 10 mpg, viejo
+      { odometro: 1700, galones: 20 },
+      { odometro: 2100, galones: 20 },
+      { odometro: 2400, galones: 15 },
+    ];
+    expect(realMpg(largo)).toBe(20); // 1100 / 55
+  });
+});
+
+describe("huecos (llenados sin apuntar)", () => {
+  const fu = [
+    { id: "a", odometro: 10000, galones: 10 },
+    { id: "b", odometro: 10200, galones: 10 }, // 20
+    { id: "c", odometro: 13000, galones: 5 }, // hueco de 2800 mi
+    { id: "d", odometro: 13220, galones: 10 }, // 22
+  ];
+  it("se marca y no cruza al cálculo", () => {
+    expect(realMpg(fu)).toBe(22);
+    const t = fillInfoById(fu);
+    expect(t.c).toEqual({ millas: 2800, gap: true });
+    expect(t.d).toEqual({ millas: 220, gap: false });
     expect(t.a).toBeUndefined();
   });
-  it("si todos son imposibles, cae al MPG asumido", () => {
-    const e = effectiveMpg(DEFAULT_CONFIG, fu.slice(1, 3));
+  it("si el tramo da imposible (fuera de 8–45), cae al MPG asumido", () => {
+    const raro = [
+      { odometro: 1000, galones: 10 },
+      { odometro: 1500, galones: 5 }, // 100 mpg
+    ];
+    expect(realMpg(raro)).toBe(null);
+    const e = effectiveMpg(DEFAULT_CONFIG, raro);
     expect(e.source).toBe("assumed");
     expect(e.mpg).toBe(DEFAULT_CONFIG.mpg);
   });
