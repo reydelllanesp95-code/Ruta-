@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { vehicleOf, vehicleConfig, vehicleConfigs, forVehicle } from "../vehicles.js";
-import { makeFuelup, validateFuelup, maxOdometro } from "../fuel.js";
+import { makeFuelup, validateFuelup } from "../fuel.js";
 import { makeMaint, histMaintCostPerMile } from "../maintenance.js";
 import { makeShift, validateShift } from "../platforms.js";
 import { aggregate, finalizeRoute, routeEconomics } from "../earnings.js";
@@ -93,10 +93,9 @@ describe("MPG real por vehículo", () => {
   });
   it("odómetro del Tucson menor que el del Kia se acepta", () => {
     const fu = [makeFuelup({ fecha: "2026-10-01", galones: 10, odometro: 90000, vehiculo: "kia" })];
-    const prevTucson = maxOdometro(forVehicle(fu, "tucson"));
-    expect(validateFuelup({ galones: 9, odometro: 15000 }, prevTucson).ok).toBe(true);
-    const prevKia = maxOdometro(forVehicle(fu, "kia"));
-    expect(validateFuelup({ galones: 9, odometro: 15000 }, prevKia).ok).toBe(false);
+    const nuevo = { galones: 9, odometro: 15000, fecha: "2026-10-02" };
+    expect(validateFuelup(nuevo, forVehicle(fu, "tucson")).ok).toBe(true);
+    expect(validateFuelup(nuevo, forVehicle(fu, "kia")).ok).toBe(false);
   });
   it("costo/milla histórico de mantenimiento no mezcla carros", () => {
     const mt = [

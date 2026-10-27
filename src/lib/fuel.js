@@ -21,9 +21,11 @@ export function makeFuelup({ fecha, galones, costo, odometro, vehiculo }) {
   };
 }
 
-// Valida un fuel-up ANTES de guardar. `prevOdometro` = odómetro más alto ya
-// registrado (o null). Devuelve { ok, error } para avisar en pantalla. [ajuste 3]
-export function validateFuelup({ galones, odometro }, prevOdometro) {
+// Valida un fuel-up ANTES de guardar contra los llenados ya registrados del
+// mismo carro. Permite llenados atrasados: el odómetro solo tiene que encajar
+// con el orden por fecha (mayor que los de fechas anteriores, menor que los de
+// fechas posteriores) y no repetir uno existente. Devuelve { ok, error }.
+export function validateFuelup({ galones, odometro, fecha }, fuelups = []) {
   const g = Number(galones);
   if (!Number.isFinite(g) || g <= 0) {
     return { ok: false, error: "Los galones deben ser un número mayor que 0." };
@@ -32,11 +34,20 @@ export function validateFuelup({ galones, odometro }, prevOdometro) {
   if (!Number.isFinite(o) || o <= 0) {
     return { ok: false, error: "El odómetro debe ser un número mayor que 0." };
   }
-  if (prevOdometro != null && o <= Number(prevOdometro)) {
-    return {
-      ok: false,
-      error: `Revisa el odómetro: ${o} es menor o igual que el anterior (${prevOdometro}).`,
-    };
+  const d = String(fecha || "").slice(0, 10);
+  for (const f of fuelups || []) {
+    const fo = Number(f.odometro);
+    if (!Number.isFinite(fo)) continue;
+    const fd = String(f.fecha || "").slice(0, 10);
+    if (fo === o) {
+      return { ok: false, error: `Ya hay un llenado con odómetro ${o} (${fd}).` };
+    }
+    if (d && fd && fd < d && fo > o) {
+      return { ok: false, error: `Revisa el odómetro: el llenado del ${fd} ya tenía ${fo}, más que ${o}.` };
+    }
+    if (d && fd && fd > d && fo < o) {
+      return { ok: false, error: `Revisa el odómetro: el llenado del ${fd} tenía ${fo}, menos que ${o}.` };
+    }
   }
   return { ok: true };
 }
@@ -51,16 +62,19 @@ export function maxOdometro(fuelups) {
   return max;
 }
 
-// Rango posible para un carro de calle (un Sorento o Tucson híbrido no pasa de
-// ~40). Fuera de esto casi siempre es un tanque no lleno, un llenado sin apuntar
-// o un odómetro mal escrito: ese tanque no cuenta para el MPG real.
+// Rango posible para un carro de calle. Si el MPG del tramo cae fuera, algo
+// está mal apuntado y se usa el MPG asumido.
 export const MPG_MIN = 8;
 export const MPG_MAX = 45;
+// Más millas que esto entre dos llenados = hubo llenados sin apuntar (hueco).
+export const MAX_GAP_MILES = 700;
+// El MPG real se mide sobre al menos estas millas recientes (~2 tanques), para que los
+// llenados parciales ($20 un día, $40 otro) se compensen entre sí.
+export const WINDOW_MILES = 1000;
 
-// Pares válidos consecutivos (ordenados por odómetro asc). Cada par mide un
-// tanque: mpg = (odo_actual - odo_anterior) / galones_actual.
-// Descarta: galones<=0, odómetro no creciente. [edge cases del spec]
-// `plausible` = el mpg cae dentro del rango posible.
+// Pares consecutivos (ordenados por odómetro asc): millas desde el llenado
+// anterior y galones echados en este. Descarta galones<=0 y odómetro no
+// creciente. `gap` = demasiadas millas, faltan llenados por apuntar.
 export function validPairs(fuelups) {
   const sorted = (fuelups || [])
     .filter((f) => Number.isFinite(Number(f.odometro)))
@@ -71,29 +85,41 @@ export function validPairs(fuelups) {
     const prev = Number(sorted[i - 1].odometro);
     const curr = Number(sorted[i].odometro);
     const gal = Number(sorted[i].galones);
-    if (!(curr > prev)) continue; // odómetro no creciente → par inválido
-    if (!Number.isFinite(gal) || gal <= 0) continue; // galones inválidos
-    const mpg = (curr - prev) / gal;
-    pairs.push({ id: sorted[i].id, millas: curr - prev, galones: gal, mpg, plausible: mpg >= MPG_MIN && mpg <= MPG_MAX });
+    if (!(curr > prev)) continue;
+    if (!Number.isFinite(gal) || gal <= 0) continue;
+    const millas = curr - prev;
+    pairs.push({ id: sorted[i].id, millas, galones: gal, gap: millas > MAX_GAP_MILES });
   }
   return pairs;
 }
 
-// MPG de cada tanque por id del llenado que lo cierra (para la lista).
-export function tankMpgById(fuelups) {
-  return Object.fromEntries(validPairs(fuelups).filter((p) => p.id != null).map((p) => [p.id, { mpg: round1(p.mpg), plausible: p.plausible }]));
+// Millas desde el llenado anterior por id (para la lista) y si es un hueco.
+export function fillInfoById(fuelups) {
+  return Object.fromEntries(
+    validPairs(fuelups)
+      .filter((p) => p.id != null)
+      .map((p) => [p.id, { millas: Math.round(p.millas), gap: p.gap }]),
+  );
 }
 
-// MPG real = millas totales ÷ galones totales de los últimos N tanques
-// posibles (un tanque raro pesa según sus galones, no igual que uno lleno).
-// Sin tanques posibles → null (no crashea).
-export function realMpg(fuelups, lastN = Infinity) {
-  const pairs = validPairs(fuelups).filter((p) => p.plausible);
-  if (pairs.length === 0) return null;
-  const use = lastN === Infinity ? pairs : pairs.slice(-Math.max(1, lastN));
-  const millas = use.reduce((a, p) => a + p.millas, 0);
-  const galones = use.reduce((a, p) => a + p.galones, 0);
-  return round1(millas / galones);
+// MPG real por tramo: desde el último llenado hacia atrás, suma millas y
+// galones hasta juntar WINDOW_MILES (o hasta un hueco). Con llenados parciales
+// cada llenado suelto miente, pero el total del tramo no. Null si no hay datos
+// o si el resultado es imposible para un carro (fuera de 8–45).
+export function realMpg(fuelups) {
+  const pairs = validPairs(fuelups);
+  let millas = 0;
+  let galones = 0;
+  for (let i = pairs.length - 1; i >= 0; i--) {
+    if (pairs[i].gap) break;
+    millas += pairs[i].millas;
+    galones += pairs[i].galones;
+    if (millas >= WINDOW_MILES) break;
+  }
+  if (galones <= 0) return null;
+  const mpg = millas / galones;
+  if (mpg < MPG_MIN || mpg > MPG_MAX) return null;
+  return round1(mpg);
 }
 
 // MPG efectivo (DERIVADO, no se persiste): usa el real si hay datos, si no el
