@@ -21,6 +21,9 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
         cleanupOutdatedCaches: true,
+        // El lector de capturas (varios MB) no entra en la caché de arranque:
+        // se descarga solo la primera vez que se usa.
+        globIgnores: ["**/ocr/**", "**/ocr-lang/**"],
       },
       manifest: {
         name: "Ruta",

@@ -1,0 +1,2 @@
+Datos de idioma del lector de capturas: spa/eng.traineddata de tessdata_fast
+(https://github.com/tesseract-ocr/tessdata_fast), licencia Apache-2.0.

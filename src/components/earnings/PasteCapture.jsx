@@ -1,16 +1,38 @@
-import React, { useState } from "react";
-import { ClipboardPaste } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { ClipboardPaste, Images } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, fechaCorta } from "../../lib/earnings.js";
 import { readCapture, applyCapture } from "../../lib/captura.js";
 import { platformLabel } from "../../lib/platforms.js";
 
-// Pegar el texto copiado de una captura de Flex o Lyft, revisar y aplicar.
+// Leer capturas de Flex o Lyft (como foto o pegando su texto), revisar y aplicar.
 export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
   const [texto, setTexto] = useState("");
   const [error, setError] = useState("");
   const [plan, setPlan] = useState(null);
   const [plataforma, setPlataforma] = useState(null);
+  const [leyendo, setLeyendo] = useState("");
+  const fotosRef = useRef(null);
+
+  async function onFotos(e) {
+    const files = [...(e.target.files || [])];
+    e.target.value = "";
+    if (!files.length) return;
+    setError("");
+    setPlan(null);
+    try {
+      const { readCaptureImages } = await import("../../lib/ocr.js");
+      const r = await readCaptureImages(files, routes, setLeyendo);
+      setTexto(r.text || "");
+      if (!r.ok) return setError(r.error);
+      setPlataforma(r.plataforma);
+      setPlan(r.plan);
+    } catch (err) {
+      setError("No pude leer las fotos (" + (err.message || err) + "). Pega el texto de la captura.");
+    } finally {
+      setLeyendo("");
+    }
+  }
 
   async function pegar() {
     try {
@@ -37,15 +59,26 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
 
   return (
     <div className="rounded-xl p-3 space-y-2.5" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
-      <div className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Pegar captura (Flex o Lyft)</div>
+      <div className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Capturas de Flex o Lyft</div>
+      <input ref={fotosRef} type="file" accept="image/*" multiple onChange={onFotos} className="hidden" />
+      <button
+        type="button"
+        disabled={Boolean(leyendo)}
+        onClick={() => fotosRef.current?.click()}
+        className={"w-full flex items-center justify-center gap-2 " + btn}
+        style={{ backgroundColor: T.red, color: "#fff", opacity: leyendo ? 0.6 : 1 }}
+      >
+        <Images size={16} /> {leyendo ? "Leyendo…" : "Elegir capturas"}
+      </button>
+      {leyendo && <div className="text-[12.5px]" style={{ color: T.textSecondary }}>{leyendo}</div>}
       <div className="text-[12.5px]" style={{ color: T.textSecondary }}>
-        En Fotos abre la captura (Ganancias de Flex o Actividad diaria de Lyft), toca el icono de texto y «Copiar todo». Puedes pegar varias capturas seguidas, pero de una sola app.
+        Elige las capturas de una sola app (Ganancias de Flex, o Actividad diaria + Estadísticas de Lyft). Si una no se lee bien, pega su texto (Fotos → icono de texto → «Copiar todo») o corrige aquí y toca «Leer».
       </div>
       <textarea
         value={texto}
         onChange={(e) => { setTexto(e.target.value); setPlan(null); }}
         rows={5}
-        placeholder="Pega aquí el texto"
+        placeholder="O pega aquí el texto"
         className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
         style={box}
       />
@@ -107,7 +140,7 @@ function Cambio({ c }) {
         {dia} · {c.horario} — <span style={{ color: T.ok }}>nuevo</span>: {formatMoney(c.pago)}
         {c.propina ? ` + ${formatMoney(c.propina)} propina` : ""}
         {c.tipo === "nuevo" && <div>No estaba apuntado; queda sin millas.</div>}
-        {c.horas != null && c.plataforma === "lyft" && <div>Horas: {c.horas}</div>}
+        {c.horas != null && c.plataforma === "lyft" && <div>Horas: {c.horas} ({c.horasFuente})</div>}
       </div>
     );
   }
