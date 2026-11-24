@@ -122,10 +122,11 @@ $40.50`;
 describe('Lyft', () => {
   it('lee el día: total, propinas, viajes y primera/última hora', () => {
     const r = parseLyftText(LYFT, HOY);
-    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasConectado: null }] });
+    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasTrabajo: null }] });
   });
-  it('con estadísticas usa el tiempo conectado e ignora sus importes', () => {
-    expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].horasConectado).toBe(5.5);
+  it('con estadísticas usa el tiempo reservado (no el conectado) e ignora sus importes', () => {
+    expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].horasTrabajo).toBe(2.17);
+    expect(parseLyftText(LYFT + '\n' + STATS.replace(/Tiempo reservado.*\n/, ''), HOY).dias[0].horasTrabajo).toBe(5.5);
   });
   it('columnas separadas dan lo mismo', () => {
     const l = LYFT.split('\n');
@@ -144,7 +145,7 @@ describe('Lyft', () => {
     expect(r.plan.cambios[0].bloques[0].despues).toEqual({ pago: 33, propina: 7.5 });
     const next = applyCapture('lyft', [manual], r.plan, { vehiculo: 'kia' });
     expect(next).toHaveLength(1);
-    expect(next[0]).toMatchObject({ ganancia: 40.5, horas: 5.5, millas: 20, nota: 'a mano' });
+    expect(next[0]).toMatchObject({ ganancia: 40.5, horas: 2.17, millas: 20, nota: 'a mano' });
     expect(readCapture(LYFT + '\n' + STATS, next, HOY).plan.cambios).toEqual([]);
   });
   it('readCapture manda el texto de Flex al lector de Flex', () => {
@@ -152,11 +153,11 @@ describe('Lyft', () => {
   });
 });
 
-describe('Lyft: tiempo conectado semanal', () => {
+describe('Lyft: tiempo de la semana', () => {
   it('no se usa si ya hay otro día de Lyft en esa semana', () => {
     const otro = makeShift({ plataforma: 'lyft', vehiculo: 'kia', fecha: '2025-03-04', pago: '10', millas: '0' });
     const r = readCapture(LYFT + '\n' + STATS, [otro], HOY);
-    expect(r.plan.cambios[0].horas).toBe(8.67); // 09:30–18:10, no las 5.5 de la semana
+    expect(r.plan.cambios[0].horas).toBe(8.67); // 09:30–18:10, no el tiempo de toda la semana
   });
 });
 

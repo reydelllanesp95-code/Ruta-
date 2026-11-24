@@ -26,3 +26,9 @@ Criterios (se fijan ANTES de programar; no se tocan tras ver resultados):
 
 SIN MEDIR hasta tener el texto real que copia el iPhone de Lyft: los tests usan
 el texto transcrito de la captura, en dos órdenes.
+
+Cambio pedido por Rey (23-nov, antes de publicar): las horas de Lyft son el
+«Tiempo reservado» (llevando pasajeros), no el «Tiempo conectado», porque usa
+Lyft conectado para volver a casa. El criterio 4 pasa a decir «Tiempo
+reservado» (4 h 6 min = 4.1 h el 22 nov); el conectado solo si no hay
+reservado. Lo decidió él; no es un ajuste de la vara tras ver resultados.

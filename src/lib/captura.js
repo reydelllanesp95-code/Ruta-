@@ -237,7 +237,7 @@ const LYFT_TOKEN = new RegExp(
     // «de $1.00» suelto: el iPhone a veces parte «Bono … de $1.00» con la hora en medio
     `(?<suelto>\\bde\\s+\\$\\s*${AMOUNT})`,
     "(?<semana>semana del\\s+([a-z]{3})[a-z]*\\s+(\\d{1,2})\\s+al\\s+(?:([a-z]{3})[a-z]*\\s+)?(\\d{1,2}))",
-    "(?<conectado>tiempo conectado(?:[^\\d]{0,80}?)(\\d+)\\s*h(?:\\s*(\\d+)\\s*min)?)",
+    "(?<conectado>tiempo (conectado|reservado)(?:[^\\d]{0,80}?)(\\d+)\\s*h(?:\\s*(\\d+)\\s*min)?)",
     // Lyft siempre muestra centavos; así se ignora el «$89» de la gráfica.
     "(?<dinero>\\$\\s*([\\d,]+\\.\\d{2}))",
     "(?<hora>\\b(\\d{1,2}):(\\d{2})\\s*(am|pm)\\b)",
@@ -249,10 +249,11 @@ export function isLyftText(text) {
   return /\blyft\b|actividad diaria|\d{1,2}\s+de\s+[a-z]{3}/i.test(String(text || "")) && !/consejos\s*:/i.test(String(text || ""));
 }
 
-// Devuelve { ok, dias: [{ fecha, total, propina, viajes, horaInicio, horaFin, horasConectado }], error }
+// Devuelve { ok, dias: [{ fecha, total, propina, viajes, horaInicio, horaFin, horasTrabajo }], error }
 export function parseLyftText(text, today = new Date()) {
   const dias = [];
   let conectado = null;
+  let reservado = null;
   let semana = null;
   for (const m of normalize(text).matchAll(LYFT_TOKEN)) {
     const g = m.groups;
@@ -272,15 +273,19 @@ export function parseLyftText(text, today = new Date()) {
         semana = { desde: iso(m1, Number(m[11])), hasta: iso(m2, Number(m[13])) };
       }
     } else if (g.conectado) {
-      conectado = round2(Number(m[15]) + Number(m[16] || 0) / 60);
+      // Horas trabajadas = «Tiempo reservado» (llevando pasajeros). El conectado
+      // incluye ratos sin trabajar (p. ej. volviendo a casa): solo si no hay otro.
+      const h = round2(Number(m[16]) + Number(m[17] || 0) / 60);
+      if (m[15].toLowerCase() === "reservado") reservado = h;
+      else conectado = h;
     } else if (g.dinero) {
       if (!d) continue;
-      if (d.total == null) d.total = money(m[18]);
+      if (d.total == null) d.total = money(m[19]);
       // Al llegar al total del día se deja de sumar: lo que venga después
       // (p. ej. el total repetido detrás de las estadísticas) no es un viaje.
-      else if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(money(m[18]));
+      else if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(money(m[19]));
     } else if (g.hora && d) {
-      d.horas.push(to24(m[20], m[21], m[22]));
+      d.horas.push(to24(m[21], m[22], m[23]));
     }
   }
   if (!dias.length) return { ok: false, error: "No encontré el día de Lyft («dom 22 de nov»)." };
@@ -298,15 +303,15 @@ export function parseLyftText(text, today = new Date()) {
       viajes: d.viajes.filter((x) => x > 0).length,
       horaInicio: orden[0] || "",
       horaFin: orden.at(-1) || "",
-      horasConectado: dias.length === 1 ? conectado : null,
-      ...(dias.length === 1 && conectado && semana ? { semana } : {}),
+      horasTrabajo: dias.length === 1 ? reservado ?? conectado : null,
+      ...(dias.length === 1 && (reservado ?? conectado) && semana ? { semana } : {}),
     });
   }
   return { ok: true, dias: out };
 }
 
 function lyftHoras(d) {
-  if (d.horasConectado) return d.horasConectado;
+  if (d.horasTrabajo) return d.horasTrabajo;
   const a = mins(d.horaInicio), b = mins(d.horaFin);
   return a == null || b == null || a === b ? null : round2(((b - a + 1440) % 1440) / 60);
 }
@@ -321,7 +326,7 @@ export function planLyftImport(dias, routes) {
     // El tiempo conectado de las estadísticas es de la SEMANA: solo vale como
     // horas del día si no hay otros días de Lyft en esa semana.
     const otrosEnSemana = d.semana && lyft.some((x) => x.fecha !== d.fecha && x.fecha >= d.semana.desde && x.fecha <= d.semana.hasta);
-    const horas = lyftHoras(otrosEnSemana ? { ...d, horasConectado: null } : d);
+    const horas = lyftHoras(otrosEnSemana ? { ...d, horasTrabajo: null } : d);
     const nota = `Lyft: ${d.viajes} viaje(s) (desde captura)`;
     const horario = d.horaInicio ? `${d.horaInicio}–${d.horaFin}` : "";
     const r = lyft.find((x) => x.fecha === d.fecha);
