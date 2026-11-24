@@ -10,6 +10,16 @@ function iso(d) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// «Domingo 22 nov».
+export function nombreDia(fecha) {
+  const [y, m, d] = fecha.split("-").map(Number);
+  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${DIAS[wd][0].toUpperCase()}${DIAS[wd].slice(1)} ${d} ${MESES[m - 1]}`;
+}
+
 export function addDays(fecha, n) {
   const [y, m, d] = fecha.split("-").map(Number);
   return iso(new Date(Date.UTC(y, m - 1, d + n)));
@@ -18,6 +28,7 @@ export function addDays(fecha, n) {
 // Periodo que contiene `ref`: { tipo, desde, hasta, label }.
 export function periodo(tipo, ref, startDow = 6) {
   const [y, m] = ref.split("-").map(Number);
+  if (tipo === "día") return { tipo, desde: ref, hasta: ref, label: nombreDia(ref) };
   if (tipo === "semana") {
     const desde = payWeekStart(ref, startDow);
     const hasta = payWeekEnd(desde);
@@ -33,6 +44,7 @@ export function periodo(tipo, ref, startDow = 6) {
 
 // El periodo anterior (delta -1) o siguiente (+1) del mismo tipo.
 export function moverPeriodo(p, delta, startDow = 6) {
+  if (p.tipo === "día") return periodo("día", addDays(p.desde, delta), startDow);
   if (p.tipo === "semana") return periodo("semana", addDays(p.desde, 7 * delta), startDow);
   if (p.tipo === "mes") {
     const [y, m] = p.desde.split("-").map(Number);
@@ -161,4 +173,21 @@ export function filasAño(datos, año) {
   const mant = (datos.maints || []).filter((m) => String(m.fecha).startsWith(String(año))).reduce((s, m) => s + costoReal(m.costo), 0);
   filas.push(["mantenimiento pagado", round2(mant).toFixed(2)]);
   return { resumen: r, filas, mantenimientoPagado: round2(mant) };
+}
+
+// «Tu día promedio»: promedio por día trabajado de las `semanas` anteriores
+// a `fecha` (sin contarla). Los días sin trabajos no cuentan.
+export function promedioDia(datos, fecha, semanas = 4) {
+  const r = resumenRango(datos, addDays(fecha, -7 * semanas), addDays(fecha, -1));
+  const n = r.dias;
+  const div = (v) => (n > 0 ? round2(v / n) : 0);
+  return {
+    dias: n,
+    ganado: div(r.ganado),
+    neto: div(r.neto),
+    horas: div(r.horas),
+    millas: div(r.millas),
+    netoHora: r.horas > 0 ? round2(r.neto / r.horas) : null,
+    label: n ? `tu día promedio (${n} días)` : "sin días anteriores",
+  };
 }
