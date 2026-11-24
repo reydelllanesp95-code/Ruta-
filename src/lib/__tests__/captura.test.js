@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFlexText, planFlexImport, applyFlexPlan } from '../captura.js';
+import { parseFlexText, planFlexImport, applyFlexPlan, parseLyftText, readCapture, applyCapture } from '../captura.js';
 import { makeShift } from '../platforms.js';
 
 // Datos sintéticos, ajenos al historial del usuario. Mismo formato que el
@@ -93,5 +93,78 @@ describe('planFlexImport / applyFlexPlan', () => {
     const plan2 = planFlexImport(items, next);
     expect(plan2.cambios).toEqual([]);
     expect(plan2.sinCambios).toBe(4);
+  });
+});
+
+// ---- Lyft (sintético, mismo formato que «Actividad diaria») ----
+const LYFT = `Actividad diaria
+sáb 8 de mar
+$40.50
+$15.25 Lyft
+incluye Propina de $3.00 y Bono de $1.00
+6:10 p.m.
+$0.00 Pasajero cancelado
+2:05 p.m.
+$2.00 Pasajero cancelado
+1:40 p.m.
+$23.25 Extra confort
+incluye Propina de $4.50
+9:30 a.m.`;
+const STATS = `$40
+Estadísticas de manejo
+Semana del mar 2 al 8
+Viajes completados 3
+Tiempo reservado 2 h 10 min
+Kilómetros reservados 30,5 mi
+Tiempo conectado 5 h 30 min
+$40.50`;
+
+describe('Lyft', () => {
+  it('lee el día: total, propinas, viajes y primera/última hora', () => {
+    const r = parseLyftText(LYFT, HOY);
+    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasTrabajo: null }] });
+  });
+  it('con estadísticas usa el tiempo reservado (no el conectado) e ignora sus importes', () => {
+    expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].horasTrabajo).toBe(2.17);
+    expect(parseLyftText(LYFT + '\n' + STATS.replace(/Tiempo reservado.*\n/, ''), HOY).dias[0].horasTrabajo).toBe(5.5);
+  });
+  it('columnas separadas dan lo mismo', () => {
+    const l = LYFT.split('\n');
+    const izq = l.filter((x) => !/\$|incluye|\d:\d\d/.test(x));
+    const der = l.filter((x) => /\$|incluye/.test(x));
+    const horas = l.filter((x) => /^\d{1,2}:\d\d/.test(x));
+    expect(parseLyftText([...izq, ...der, ...horas].join('\n'), HOY).dias).toEqual(parseLyftText(LYFT, HOY).dias);
+  });
+  it('error si los viajes no suman el total del día', () => {
+    expect(parseLyftText(LYFT.replace('$15.25', '$15.20'), HOY).ok).toBe(false);
+  });
+  it('un registro por día; actualiza en vez de duplicar; dos veces = 0 cambios', () => {
+    const manual = makeShift({ plataforma: 'lyft', vehiculo: 'kia', fecha: '2025-03-08', pago: '15', millas: '20', nota: 'a mano' });
+    const r = readCapture(LYFT + '\n' + STATS, [manual], HOY);
+    expect(r.plataforma).toBe('lyft');
+    expect(r.plan.cambios[0].bloques[0].despues).toEqual({ pago: 33, propina: 7.5 });
+    const next = applyCapture('lyft', [manual], r.plan, { vehiculo: 'kia' });
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({ ganancia: 40.5, horas: 2.17, millas: 20, nota: 'a mano' });
+    expect(readCapture(LYFT + '\n' + STATS, next, HOY).plan.cambios).toEqual([]);
+  });
+  it('readCapture manda el texto de Flex al lector de Flex', () => {
+    expect(readCapture(TEXTO, [], HOY).plataforma).toBe('flex');
+  });
+});
+
+describe('Lyft: tiempo de la semana', () => {
+  it('no se usa si ya hay otro día de Lyft en esa semana', () => {
+    const otro = makeShift({ plataforma: 'lyft', vehiculo: 'kia', fecha: '2025-03-04', pago: '10', millas: '0' });
+    const r = readCapture(LYFT + '\n' + STATS, [otro], HOY);
+    expect(r.plan.cambios[0].horas).toBe(8.67); // 09:30–18:10, no el tiempo de toda la semana
+  });
+});
+
+describe('Lyft: texto real del iPhone con cortes', () => {
+  it('«Bono … de $x» partido por la hora y la pantalla de un cobro no estorban', () => {
+    const cobro = `<\n8 de marzo de 2025\nGanancias de viaje\n$30.00\nPropinas\n$7.50\nPago\n$37.50\nIniciado el sábado, 8 de marzo de 2025 a la(s)\n1:29 p.m.\n`;
+    const partido = LYFT.replace('incluye Propina de $3.00 y Bono de $1.00\n6:10 p.m.', 'incluye Propina de $3.00 y Bono 6:10 p.m. ›\nde $1.00');
+    expect(parseLyftText(cobro + partido, HOY).dias).toEqual(parseLyftText(LYFT, HOY).dias);
   });
 });
