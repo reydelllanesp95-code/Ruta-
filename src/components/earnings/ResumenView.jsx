@@ -54,7 +54,7 @@ export default function ResumenView({ datos, startDow, onSaveJornada, umbrales, 
         <Card>
           <MetaBar neta={meta.neta} u={umbrales} tramo={tramoMeta(meta.neta, umbrales)} porLlegar={meta.porLlegar} />
           <div className="text-[12px] mt-2" style={{ color: T.textFaint }}>
-            Neta = {formatMoney(meta.ganado)} ganado − {formatMoney(meta.gastos.gasolina)} gasolina pagada − {formatMoney(meta.gastos.mantenimiento)} mantenimiento − {formatMoney(meta.gastos.comida)} comida.
+            Neta = {formatMoney(meta.ganado)} ganado − {formatMoney(meta.gastos.gasolina)} gasolina pagada − {formatMoney(meta.gastos.mantenimiento)} mantenimiento − {formatMoney(meta.gastos.comida)} comida − {formatMoney(meta.gastos.peajes)} peajes.
           </div>
           <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${T.border}` }}>
             <div className="text-[12.5px] mb-2" style={{ color: T.textFaint }}>
@@ -88,7 +88,7 @@ export default function ResumenView({ datos, startDow, onSaveJornada, umbrales, 
         <>
           <NetoHero r={r} netoLabel={esDia ? "Neto del día" : "Neto"} />
           {esDia && <LineaDeTiempo lista={dia.lista} jornadas={(datos.jornadas || []).filter((j) => j.fecha === p.desde)} />}
-          <Deducciones d={r.deducciones} gasolinaPagada={r.gasolinaPagada} titulo={esDia ? "Deducciones del día" : "Deducciones"} />
+          <Deducciones d={r.deducciones} titulo={esDia ? "Deducciones del día" : "Deducciones"} />
         </>
       )}
 

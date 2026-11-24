@@ -1,6 +1,6 @@
 // Resúmenes por periodo (semana de pago, mes, año) y por día: lo ganado, las
-// deducciones (gasolina y mantenimiento estimados + comida y peajes apuntados)
-// y el neto. Lógica pura; se calcula al mostrar, no se guarda.
+// deducciones (gasolina pagada repartida por millas, mantenimiento estimado,
+// comida y peajes apuntados) y el neto. Lógica pura; se calcula al mostrar, no se guarda.
 
 import { round2, routeEconomics, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
 import { deliveryOnly, platformOf, platformLabel, isShift } from "./platforms.js";
@@ -60,6 +60,50 @@ function costoReal(v) {
   return v != null && v !== "" && Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+// Gasolina: lo pagado cada semana (lunes→domingo) se reparte entre sus días
+// según las millas de reparto; una semana sin millas, a partes iguales por día.
+const SEMANA_GAS = 1; // lunes
+
+function pagadoEn(fuelups, desde, hasta) {
+  return (fuelups || []).filter((f) => enRango(String(f.fecha), desde, hasta)).reduce((s, f) => s + costoReal(f.costo), 0);
+}
+
+function millasEn(routes, desde, hasta) {
+  return deliveryOnly(routes || [])
+    .filter((r) => enRango(r.fecha, desde, hasta))
+    .reduce((s, r) => s + (Number(r.millas) > 0 ? Number(r.millas) : 0), 0);
+}
+
+export function gasolinaRango(datos, desde, hasta) {
+  const { routes = [], fuelups = [] } = datos;
+  let total = 0;
+  let p = periodo("semana", desde, SEMANA_GAS);
+  while (p.desde <= hasta) {
+    const pagado = pagadoEn(fuelups, p.desde, p.hasta);
+    if (pagado > 0) {
+      const a = desde > p.desde ? desde : p.desde;
+      const b = hasta < p.hasta ? hasta : p.hasta;
+      const mSemana = millasEn(routes, p.desde, p.hasta);
+      if (mSemana > 0) total += (pagado * millasEn(routes, a, b)) / mSemana;
+      else {
+        let dias = 0;
+        for (let d = a; d <= b; d = addDays(d, 1)) dias++;
+        total += (pagado * dias) / 7;
+      }
+    }
+    p = periodo("semana", addDays(p.desde, 7), SEMANA_GAS);
+  }
+  return round2(total);
+}
+
+// $ de gasolina por milla de la semana de `fecha` (pagado ÷ millas de
+// reparto); 0 si esa semana no tiene millas.
+export function gasPorMilla(datos, fecha) {
+  const p = periodo("semana", fecha, SEMANA_GAS);
+  const m = millasEn(datos.routes, p.desde, p.hasta);
+  return m > 0 ? pagadoEn(datos.fuelups, p.desde, p.hasta) / m : 0;
+}
+
 // datos: { routes (con millas de jornada ya repartidas), meals, tolls,
 // fuelups, jornadas, configFor }. Devuelve los totales del rango [desde, hasta].
 // Las horas de un día con jornada son las de la jornada (salida → «paré» o
@@ -73,7 +117,7 @@ export function resumenRango(datos, desde, hasta) {
     if (h != null) horasDia.set(j.fecha, round2((horasDia.get(j.fecha) || 0) + h));
   }
   const regs = deliveryOnly(routes).filter((r) => enRango(r.fecha, desde, hasta));
-  let ganado = 0, propinas = 0, horas = 0, millas = 0, gasolina = 0, mantenimiento = 0;
+  let ganado = 0, propinas = 0, horas = 0, millas = 0, mantenimiento = 0;
   const apps = new Map();
   const dias = new Set();
   for (const r of regs) {
@@ -84,7 +128,6 @@ export function resumenRango(datos, desde, hasta) {
     propinas += Number(r.propina) || 0;
     if (!horasDia.has(r.fecha)) horas += h;
     millas += Number(r.millas) || 0;
-    gasolina += eco.fuel_cost;
     mantenimiento += eco.maintenance_est;
     dias.add(r.fecha);
     const k = platformOf(r);
@@ -97,9 +140,9 @@ export function resumenRango(datos, desde, hasta) {
   for (const [f, h] of horasDia) if (dias.has(f)) horas += h;
   const comida = meals.filter((m) => enRango(String(m.fecha), desde, hasta)).reduce((s, m) => s + costoReal(m.costo), 0);
   const peajes = tolls.filter((t) => enRango(String(t.fecha), desde, hasta)).reduce((s, t) => s + costoReal(t.monto), 0);
-  const gasolinaPagada = fuelups.filter((f) => enRango(String(f.fecha), desde, hasta)).reduce((s, f) => s + costoReal(f.costo), 0);
+  const gasolinaPagada = pagadoEn(fuelups, desde, hasta);
   const deducciones = {
-    gasolina: round2(gasolina),
+    gasolina: gasolinaRango(datos, desde, hasta),
     mantenimiento: round2(mantenimiento),
     comida: round2(comida),
     peajes: round2(peajes),

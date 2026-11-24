@@ -37,11 +37,13 @@ describe('resumenRango', () => {
     const r = resumenRango(datos, '2025-03-08', '2025-03-14');
     expect(r.ganado).toBe(85);
     expect(r.millas).toBe(70);
-    // gas: 70/20*4 = 14; mant: 7; comida 7.5; peajes 2.25
-    expect(r.deducciones).toEqual({ gasolina: 14, mantenimiento: 7, comida: 7.5, peajes: 2.25, total: 30.75 });
-    expect(r.neto).toBe(54.25);
+    // Gasolina PAGADA (decisión de Rey, 24-nov-2026): $30 de la semana lun 3–dom 9,
+    // que tiene 110 mi de reparto; a este rango le tocan 70 → 30·70/110 = 19.09.
+    // mant: 7; comida 7.5; peajes 2.25
+    expect(r.deducciones).toEqual({ gasolina: 19.09, mantenimiento: 7, comida: 7.5, peajes: 2.25, total: 35.84 });
+    expect(r.neto).toBe(49.16);
     expect(r.horas).toBe(3);
-    expect(r.netoHora).toBe(18.08);
+    expect(r.netoHora).toBe(16.39);
     expect(r.gasolinaPagada).toBe(30);
     expect(r.porApp.map((a) => [a.plataforma, a.ganado])).toEqual([['flex', 50], ['lyft', 35]]);
   });
@@ -49,7 +51,7 @@ describe('resumenRango', () => {
     const p = periodo('semana', '2025-03-10', 6);
     const r = resumenPeriodo(datos, p, 6, 3);
     expect(r.anterior.ganado).toBe(40);
-    expect(r.serie.map((s) => s.neto)).toEqual([0, 28, 54.25]); // 40 − 40/20*4 − 40*0.1
+    expect(r.serie.map((s) => s.neto)).toEqual([0, 25.09, 49.16]); // 40 − 30·40/110 − 40*0.1
   });
   it('día: registros en orden, incluida la limpieza', () => {
     const d = resumenDia(datos, '2025-03-08');

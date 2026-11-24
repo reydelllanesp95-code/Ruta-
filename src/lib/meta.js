@@ -20,22 +20,24 @@ export const TRAMO_COLOR = { 1: "#E2231A", 2: "#F0A33B", 3: "#3DD56D", 4: "#E7C1
 const enRango = (f, desde, hasta) => String(f) >= desde && String(f) <= hasta;
 const pagado = (v) => (Number(v) > 0 ? Number(v) : 0);
 
-// Neta de la meta = reparto − gasolina pagada − mantenimiento pagado − comidas.
+// Neta de la meta = reparto − gasolina pagada − mantenimiento pagado − comidas
+// − peajes.
 // Las propinas pendientes no suman (no están apuntadas); se cuentan aparte.
 export function netaMeta(datos, desde, hasta, hoy = hasta) {
-  const { routes = [], fuelups = [], maints = [], meals = [] } = datos;
+  const { routes = [], fuelups = [], maints = [], meals = [], tolls = [] } = datos;
   const reparto = deliveryOnly(routes).filter((r) => enRango(r.fecha, desde, hasta));
   const ganado = round2(reparto.reduce((s, r) => s + (Number(r.ganancia) || 0), 0));
   const gasolina = round2(fuelups.filter((f) => enRango(f.fecha, desde, hasta)).reduce((s, f) => s + pagado(f.costo), 0));
   const mantenimiento = round2(maints.filter((m) => enRango(m.fecha, desde, hasta)).reduce((s, m) => s + pagado(m.costo), 0));
   const comida = round2(meals.filter((m) => enRango(m.fecha, desde, hasta)).reduce((s, m) => s + pagado(m.costo), 0));
+  const peajes = round2(tolls.filter((t) => enRango(t.fecha, desde, hasta)).reduce((s, t) => s + pagado(t.monto), 0));
   const porLlegar = propinasPendientes(reparto, addDays(hoy, 1), 3).length;
   return {
     desde,
     hasta,
     ganado,
-    gastos: { gasolina, mantenimiento, comida, total: round2(gasolina + mantenimiento + comida) },
-    neta: round2(ganado - gasolina - mantenimiento - comida),
+    gastos: { gasolina, mantenimiento, comida, peajes, total: round2(gasolina + mantenimiento + comida + peajes) },
+    neta: round2(ganado - gasolina - mantenimiento - comida - peajes),
     porLlegar,
   };
 }

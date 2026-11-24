@@ -86,7 +86,7 @@ export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, rende
         </Card>
       )}
 
-      {r.registros > 0 && <Deducciones d={r.deducciones} gasolinaPagada={r.gasolinaPagada} titulo="Deducciones del día" />}
+      {r.registros > 0 && <Deducciones d={r.deducciones} titulo="Deducciones del día" />}
 
       <div>
         <div className="gc-eyebrow text-[11px] uppercase px-1 py-1.5" style={{ color: T.textFaint }}>Lo que hiciste</div>
