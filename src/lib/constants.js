@@ -91,16 +91,17 @@ export const DEFAULT_CONFIG = {
 // deuda semanal es otra cosa: se borran en la migración 1 → 2).
 export const META_V1_KEYS = ["meta_basico", "meta_invertir", "meta_dorado", "meta_deuda", "meta_inversion", "meta_trading_pct"];
 
-// Tarjetas del plan de deuda (saldo y APR los pone Rey en Ajustes).
+// Tarjetas del plan de deuda: nombre, fase y día de cierre (lo pone Rey). Los
+// saldos llegan como cierres: el día que cierra, RUTA le pide cuánto quedó.
 export const DEUDA_DEFAULT = {
   tarjetas: [
-    { id: "chase-prime", nombre: "Chase Prime", fase: 1, saldo: 0, apr: 0 },
-    { id: "capital-one", nombre: "Capital One", fase: 1, saldo: 0, apr: 0 },
-    { id: "chase", nombre: "Chase", fase: 1, saldo: 0, apr: 0 },
-    { id: "pnc", nombre: "PNC", fase: 1, saldo: 0, apr: 0 },
-    { id: "discover", nombre: "Discover", fase: 2, saldo: 0, apr: 0 },
+    { id: "chase-prime", nombre: "Chase Prime", fase: 1, diaCierre: null, apr: 0 },
+    { id: "capital-one", nombre: "Capital One", fase: 1, diaCierre: null, apr: 0 },
+    { id: "chase", nombre: "Chase", fase: 1, diaCierre: null, apr: 0 },
+    { id: "pnc", nombre: "PNC", fase: 1, diaCierre: null, apr: 0 },
+    { id: "discover", nombre: "Discover", fase: 2, diaCierre: null, apr: 0 },
   ],
-  pagos: [],
+  cierres: [],
   promoFin: "",
 };
 

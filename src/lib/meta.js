@@ -77,25 +77,111 @@ export function hitosMes(u, saldoFondo = 0) {
   return { tramos, meta: f(s.meta), h: Object.fromEntries(Object.entries(s.h).map(([k, v]) => [k, f(v)])) };
 }
 
-// Fase 1 mientras quede saldo en alguna tarjeta de fase 1.
-export function restanteTarjeta(t, pagos = []) {
-  return round2(Math.max(0, pos(t.saldo) - pagos.filter((p) => p.tarjetaId === t.id).reduce((s, p) => s + pos(p.monto), 0)));
+// ---- Deuda por cierres: cada tarjeta tiene su día de cierre y Rey apunta el
+// saldo que quedó. Nada de pagos sueltos.
+
+// Normaliza lo guardado. Tarjetas de la versión anterior (con `saldo`) pasan
+// ese saldo a un primer cierre en la fecha de inicio del plan.
+export function sanitizeDeudas(raw, planInicio = UMBRALES_DEFAULT.planInicio) {
+  const d = raw && typeof raw === "object" ? raw : {};
+  const tarjetas = [];
+  const cierres = Array.isArray(d.cierres) ? d.cierres.filter((c) => c && c.tarjetaId && c.fecha && Number.isFinite(Number(c.saldo))) : [];
+  for (const t of Array.isArray(d.tarjetas) ? d.tarjetas : []) {
+    if (!t || !String(t.nombre || "").trim()) continue;
+    const dia = Number(t.diaCierre);
+    tarjetas.push({
+      id: t.id,
+      nombre: String(t.nombre).trim(),
+      fase: Number(t.fase) === 2 ? 2 : 1,
+      diaCierre: Number.isInteger(dia) && dia >= 1 && dia <= 31 ? dia : null,
+      apr: pos(t.apr),
+    });
+    if (pos(t.saldo) > 0 && !cierres.some((c) => c.tarjetaId === t.id)) {
+      cierres.push({ id: `${t.id}-inicio`, tarjetaId: t.id, fecha: planInicio, saldo: round2(pos(t.saldo)) });
+    }
+  }
+  return { tarjetas, cierres, promoFin: /^\d{4}-\d{2}-\d{2}$/.test(String(d.promoFin || "")) ? d.promoFin : "" };
+}
+
+const porFecha = (a, b) => String(a.fecha).localeCompare(String(b.fecha));
+
+// Saldo de cada tarjeta según el último cierre con fecha < `antesDe` (o ≤ si
+// `incluye`). Tarjetas sin cierre aún no cuentan.
+export function saldosTarjetas(deudas, antesDe = "9999-12-31", incluye = false) {
+  const { tarjetas = [], cierres = [] } = deudas || {};
+  const out = [];
+  for (const t of tarjetas) {
+    const cs = cierres.filter((c) => c.tarjetaId === t.id && (incluye ? c.fecha <= antesDe : c.fecha < antesDe)).sort(porFecha);
+    if (!cs.length) continue;
+    out.push({ ...t, saldo: round2(pos(cs[cs.length - 1].saldo)), inicial: round2(pos(cs[0].saldo)), ultimoCierre: cs[cs.length - 1].fecha });
+  }
+  return out;
 }
 
 export function faseDeuda(deudas) {
-  const { tarjetas = [], pagos = [] } = deudas || {};
-  // Sin saldos apuntados aún: se trata como fase 1.
-  if (!tarjetas.some((t) => pos(t.saldo) > 0)) return 1;
-  const f1 = tarjetas.filter((t) => Number(t.fase) === 1);
-  if (!f1.length) return tarjetas.some((t) => Number(t.fase) === 2) ? 2 : 1;
-  return f1.some((t) => restanteTarjeta(t, pagos) > 0) ? 1 : 2;
+  const ss = saldosTarjetas(deudas);
+  if (!ss.some((t) => t.saldo > 0)) return 1;
+  return ss.some((t) => t.fase === 1 && t.saldo > 0) ? 1 : 2;
 }
 
 export function tarjetaMayorApr(deudas) {
-  const { tarjetas = [], pagos = [] } = deudas || {};
-  const vivas = tarjetas.filter((t) => Number(t.fase) === 1 && restanteTarjeta(t, pagos) > 0);
-  vivas.sort((a, b) => pos(b.apr) - pos(a.apr));
+  const vivas = saldosTarjetas(deudas).filter((t) => t.fase === 1 && t.saldo > 0 && t.apr > 0);
+  vivas.sort((a, b) => b.apr - a.apr);
   return vivas[0] || null;
+}
+
+function semanasPlan(u) {
+  return u.planMeses * SEMANAS_POR_MES;
+}
+
+// Cuota de deuda para la semana que empieza en `desde`: lo que queda (según
+// los cierres anteriores a esa semana) ÷ semanas que faltan del plan.
+// Mientras falte el saldo de alguna tarjeta, no se ajusta (evita creer que se
+// debe menos y mandar dinero a inversión por error).
+export function cuotaSemana(deudas, u, desde) {
+  const ss = saldosTarjetas(deudas, desde);
+  if (!ss.length || ss.length < (deudas?.tarjetas || []).length) return null;
+  const restante = round2(ss.reduce((s, t) => s + t.saldo, 0));
+  const pasadas = Math.max(0, (Date.parse(desde) - Date.parse(u.planInicio)) / 86400000 / 7);
+  const faltan = Math.max(1, semanasPlan(u) - pasadas);
+  return { restante, faltan: round2(faltan), cuota: round2(restante / faltan) };
+}
+
+// Umbrales de la semana con la cuota del plan: si baja, lo que sobra va a
+// inversión (en la misma proporción); si sube, sube la meta.
+export function umbralesConCuota(u, cq) {
+  if (!cq) return u;
+  const sobra = round2(Math.max(0, u.deuda - cq.cuota));
+  const inversion = round2(u.inversion + sobra);
+  const k = u.inversion > 0 ? inversion / u.inversion : 1;
+  return { ...u, deuda: cq.cuota, inversion, inversiones: u.inversiones.map((x) => ({ ...x, monto: round2(x.monto * k) })) };
+}
+
+function textoCuota(u, cq) {
+  if (!cq) return "";
+  const d = round2(cq.cuota - u.deuda);
+  if (Math.abs(d) < 0.01) return "";
+  return d < 0
+    ? `Vas adelantado con la deuda: la cuota baja a ${m(cq.cuota)}/semana y ${m(-d)} más van a inversión.`
+    : `Vas atrasado con la deuda: la cuota sube a ${m(cq.cuota)}/semana (${m(d)} más).`;
+}
+
+// Tarjetas cuyo último cierre (según su día) aún no tiene saldo apuntado.
+export function cierresPendientes(deudas, hoy) {
+  const { tarjetas = [], cierres = [] } = deudas || {};
+  const [y, mo, d] = hoy.split("-").map(Number);
+  const fechaCierre = (yy, mm, dia) => {
+    const ult = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+    return `${yy}-${String(mm).padStart(2, "0")}-${String(Math.min(dia, ult)).padStart(2, "0")}`;
+  };
+  const out = [];
+  for (const t of tarjetas) {
+    if (!t.diaCierre) continue;
+    let c = fechaCierre(y, mo, t.diaCierre);
+    if (c > hoy) c = mo === 1 ? fechaCierre(y - 1, 12, t.diaCierre) : fechaCierre(y, mo - 1, t.diaCierre);
+    if (!cierres.some((x) => x.tarjetaId === t.id && x.fecha >= c)) out.push({ tarjeta: t, fechaCierre: c });
+  }
+  return out;
 }
 
 function consejoExcedente(excedente, deudas) {
@@ -109,7 +195,10 @@ function consejoExcedente(excedente, deudas) {
 }
 
 // Estado de la semana: tramo, frase, reparto y hitos cruzados.
-export function estadoSemana(neta, u, { saldoFondo = 0, deudas = null } = {}) {
+// Con `deudas` y `desde`, la deuda de la semana es la cuota del plan.
+export function estadoSemana(neta, uBase, { saldoFondo = 0, deudas = null, desde = null } = {}) {
+  const cq = deudas && desde ? cuotaSemana(deudas, uBase, desde) : null;
+  const u = umbralesConCuota(uBase, cq);
   const hs = hitosSemana(u, saldoFondo);
   const { h } = hs;
   const n = round2(neta);
@@ -146,6 +235,9 @@ export function estadoSemana(neta, u, { saldoFondo = 0, deudas = null } = {}) {
     color,
     texto,
     consejo: consejoExcedente(reparto.excedente, deudas),
+    cuota: cq,
+    textoCuota: textoCuota(uBase, cq),
+    u,
     inversiones: n >= h.inversion ? u.inversiones : [],
     reparto,
     cruzados,
@@ -208,19 +300,19 @@ export function mesMeta(datos, u, saldoFondo, ref, hoy) {
 // Semana floja (no llegó a invertir) pero el mes va por delante del ritmo al
 // cierre de esa semana → puede invertir igual.
 export const MENSAJE_COMPENSACION = "Esta semana fue floja, pero el mes va bien: puedes invertir igual.";
-export function compensacion(datos, u, saldoFondo, semana, hoy) {
-  const est = estadoSemana(netaMeta(datos, semana.desde, semana.hasta, hoy).neta, u, { saldoFondo });
+export function compensacion(datos, u, saldoFondo, semana, hoy, deudas = null) {
+  const est = estadoSemana(netaMeta(datos, semana.desde, semana.hasta, hoy).neta, u, { saldoFondo, deudas, desde: semana.desde });
   if (est.invertir) return false;
   return mesMeta(datos, u, saldoFondo, semana.hasta, semana.hasta).adelante;
 }
 
 // Últimas `n` semanas (lunes→domingo) hasta la que contiene `ref`.
-export function historialMeta(datos, ref, u, n = 8, fondo = null) {
+export function historialMeta(datos, ref, u, n = 8, fondo = null, deudas = null) {
   const out = [];
   let p = periodo("semana", ref, 1);
   for (let i = 0; i < n; i++) {
     const r = netaMeta(datos, p.desde, p.hasta);
-    const est = estadoSemana(r.neta, u, { saldoFondo: fondo ? fondo.saldoPara(p.desde) : pos(u.fondoInicial) });
+    const est = estadoSemana(r.neta, u, { saldoFondo: fondo ? fondo.saldoPara(p.desde) : pos(u.fondoInicial), deudas, desde: p.desde });
     out.unshift({ desde: p.desde, hasta: p.hasta, label: p.label, neta: r.neta, color: est.color, cumplida: r.neta >= est.hitos.meta, invirtio: est.invertir });
     p = periodo("semana", addDays(p.desde, -7), 1);
   }
@@ -240,40 +332,41 @@ export function historialMeses(datos, u, ref, hoy, n = 6, saldoFondo = 0) {
   return out;
 }
 
-// Plan de deuda de `planMeses` meses: lo pagado («Pagué») contra lo que tocaba.
+// Plan de deuda de `planMeses` meses según los saldos de cierre: lo que queda
+// contra lo que tocaba quedar hoy, y la cuota de esta semana.
 export function planDeuda(deudas, u, hoy) {
-  const { tarjetas = [], pagos = [], promoFin = "" } = deudas || {};
-  const total = round2(tarjetas.reduce((s, t) => s + pos(t.saldo), 0));
-  const pagado = round2(pagos.filter((p) => tarjetas.some((t) => t.id === p.tarjetaId)).reduce((s, p) => s + pos(p.monto), 0));
-  const restante = round2(Math.max(0, total - pagado));
-  const semanasPlan = u.planMeses * SEMANAS_POR_MES;
-  const semanal = total > 0 ? round2(total / semanasPlan) : 0;
-  const dias = Math.max(0, (Date.parse(hoy) - Date.parse(u.planInicio)) / 86400000);
-  const transcurridas = dias / 7;
-  const esperado = Math.min(total, semanal * transcurridas);
-  const diff = semanal > 0 ? Math.round((pagado - esperado) / semanal) : 0;
+  const { promoFin = "" } = deudas || {};
+  const ss = saldosTarjetas(deudas, hoy, true);
+  const total = round2(ss.reduce((s, t) => s + t.inicial, 0));
+  const restante = round2(ss.reduce((s, t) => s + t.saldo, 0));
+  const pagado = round2(Math.max(0, total - restante));
+  const sp = semanasPlan(u);
+  const semanal = total > 0 ? round2(total / sp) : 0;
+  const transcurridas = Math.max(0, (Date.parse(hoy) - Date.parse(u.planInicio)) / 86400000 / 7);
+  const esperadoQuede = Math.max(0, total * (1 - transcurridas / sp));
+  const diff = semanal > 0 ? Math.round((esperadoQuede - restante) / semanal) : 0;
   const plural = (k) => `${k} semana${k === 1 ? "" : "s"}`;
-  const textoPlan = !total
-    ? "Apunta tus tarjetas en Ajustes para ver el plan de deuda."
+  const faltan = (deudas?.tarjetas || []).filter((t) => !ss.some((x) => x.id === t.id)).map((t) => t.nombre);
+  const textoPlan = !ss.length
+    ? "Pon tus tarjetas y su día de cierre en Ajustes; RUTA te pedirá el saldo de cada cierre."
+    : faltan.length
+    ? `Falta el saldo de ${faltan.join(", ")}: hasta tenerlo, la cuota se queda en ${m(u.deuda)}.`
     : diff > 0
     ? `Vas ${plural(diff)} por delante del plan de ${u.planMeses} meses.`
     : diff < 0
     ? `Vas ${plural(-diff)} por detrás del plan de ${u.planMeses} meses.`
     : `Vas al día con el plan de ${u.planMeses} meses.`;
-  const ritmo = transcurridas >= 1 && pagado > 0 ? pagado / transcurridas : semanal || u.deuda;
-  const fechaFin = restante > 0 && ritmo > 0 ? addDays(hoy, Math.ceil((restante / ritmo) * 7)) : null;
-  const porTarjeta = tarjetas
-    .map((t) => ({ ...t, restante: restanteTarjeta(t, pagos) }))
-    .sort((a, b) => Number(a.fase) - Number(b.fase) || pos(b.apr) - pos(a.apr));
+  const fechaPlan = addDays(u.planInicio, Math.round(sp * 7));
+  const cq = cuotaSemana(deudas, u, periodo("semana", hoy, 1).desde);
+  const porTarjeta = saldosTarjetas(deudas, hoy, true).sort((a, b) => a.fase - b.fase || b.apr - a.apr);
   let discover = null;
-  const d = tarjetas.find((t) => Number(t.fase) === 2);
+  const d = ss.find((t) => t.fase === 2);
   if (d && promoFin) {
     const objetivo = addDays(promoFin, -21);
     const semanas = Math.max(0, (Date.parse(objetivo) - Date.parse(hoy)) / 86400000 / 7);
-    const quedan = restanteTarjeta(d, pagos);
-    discover = { nombre: d.nombre, objetivo, restante: quedan, porSemana: semanas > 0 ? round2(quedan / semanas) : quedan };
+    discover = { nombre: d.nombre, objetivo, restante: d.saldo, porSemana: semanas > 0 ? round2(d.saldo / semanas) : d.saldo };
   }
-  return { total, pagado, restante, semanal, semanasDiff: diff, textoPlan, fase: faseDeuda(deudas), fechaFin, porTarjeta, discover };
+  return { total, pagado, restante, semanal, semanasDiff: diff, textoPlan, fase: faseDeuda(deudas), fechaPlan, cuota: cq, porTarjeta, discover, pendientes: cierresPendientes(deudas, hoy) };
 }
 
 // Hitos de la semana `desde` que aún no se avisaron (uno por semana cada uno).

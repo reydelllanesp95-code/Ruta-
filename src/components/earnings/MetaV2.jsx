@@ -34,7 +34,7 @@ export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, h
         meta={hitos.meta}
         color={estado.color}
         texto={estado.texto}
-        lineas={[estado.consejo, plan && plan.textoPlan]}
+        lineas={[estado.textoCuota, estado.consejo, plan && plan.textoPlan]}
         porLlegar={porLlegar}
         compact={compact}
       />
@@ -141,19 +141,50 @@ export function FondoCard({ fondo, u, usos = [], onUsar }) {
   );
 }
 
-export function DeudaCard({ plan, onPague }) {
-  const [tarjetaId, setTarjetaId] = useState(null);
-  const [monto, setMonto] = useState("");
+// Saldo de cierre de una tarjeta: un campo y Guardar.
+function SaldoForm({ tarjeta, fechaCierre, onCierre, onClose }) {
+  const [saldo, setSaldo] = useState("");
   const [error, setError] = useState("");
   function guardar() {
-    const v = Number(monto);
-    if (!(v > 0)) return setError("Pon cuánto pagaste.");
-    onPague({ id: makeUUID(), tarjetaId, fecha: todayISO(), monto: round2(v) });
-    setTarjetaId(null);
-    setMonto("");
+    const v = Number(saldo);
+    if (saldo === "" || !Number.isFinite(v) || v < 0) return setError("Pon el saldo que quedó (0 si la pagaste toda).");
+    onCierre({ id: makeUUID(), tarjetaId: tarjeta.id, fecha: fechaCierre, saldo: round2(v) });
+    setSaldo("");
     setError("");
+    onClose && onClose();
   }
+  return (
+    <div className="mt-1.5">
+      <div className="flex gap-2">
+        <input aria-label={`Saldo de ${tarjeta.nombre}`} inputMode="decimal" placeholder="Saldo $" value={saldo} onChange={(e) => setSaldo(e.target.value)} className="gc-code flex-1 min-w-0 rounded-lg px-2 py-2 text-[14px] outline-none" style={inputSt} />
+        {onClose && <button type="button" onClick={onClose} className="rounded-lg px-3 text-[13px]" style={inputSt}>×</button>}
+        <button type="button" onClick={guardar} className="rounded-lg px-3 text-[13px] font-semibold" style={btnSt}>Guardar</button>
+      </div>
+      {error && <div className="text-[12px] mt-1" style={{ color: T.red }}>{error}</div>}
+    </div>
+  );
+}
+
+// En Hoy: «Cerró Chase el 15 nov: ¿cuánto quedó?».
+export function CierresPendientes({ pendientes, onCierre }) {
+  return (
+    <Card>
+      <Eyebrow>Cierre de tarjeta</Eyebrow>
+      {pendientes.map(({ tarjeta, fechaCierre }) => (
+        <div key={tarjeta.id} className="py-1">
+          <div className="text-[14px]">Cerró {tarjeta.nombre} el {fechaCorta(fechaCierre)}: ¿cuánto quedó?</div>
+          <SaldoForm tarjeta={tarjeta} fechaCierre={fechaCierre} onCierre={onCierre} />
+        </div>
+      ))}
+      <div className="text-[11.5px] mt-1" style={{ color: T.textFaint }}>Con el saldo, RUTA recalcula la cuota de deuda de las próximas semanas.</div>
+    </Card>
+  );
+}
+
+export function DeudaCard({ plan, deudas, onCierre }) {
+  const [editando, setEditando] = useState(null);
   const pct = plan.total > 0 ? Math.min(100, (plan.pagado / plan.total) * 100) : 0;
+  const sinSaldo = (deudas?.tarjetas || []).filter((t) => !plan.porTarjeta.some((x) => x.id === t.id));
   return (
     <Card>
       <Eyebrow right={`Fase ${plan.fase}`}>Deuda</Eyebrow>
@@ -167,59 +198,55 @@ export function DeudaCard({ plan, onPague }) {
             <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: "#F0A33B" }} />
           </div>
           <div className="text-[12.5px] mt-1" style={{ color: T.textSecondary }}>
-            Pagado {formatMoney(plan.pagado)} de {formatMoney(plan.total)} · plan {formatMoney(plan.semanal)}/semana
+            Bajaste {formatMoney(plan.pagado)} de {formatMoney(plan.total)}
+            {plan.cuota ? ` · cuota esta semana ${formatMoney(plan.cuota.cuota)}` : ""}
           </div>
           <div className="text-[13px] mt-1">{plan.textoPlan}</div>
-          {plan.fechaFin && <div className="text-[12.5px]" style={{ color: T.textFaint }}>A este ritmo terminas ≈ {fechaCorta(plan.fechaFin)} {plan.fechaFin.slice(0, 4)}.</div>}
+          <div className="text-[12.5px]" style={{ color: T.textFaint }}>El plan termina el {fechaCorta(plan.fechaPlan)} {plan.fechaPlan.slice(0, 4)}.</div>
           {plan.discover && (
             <div className="text-[12.5px] mt-1" style={{ color: T.textFaint }}>
               {plan.discover.nombre}: para saldarla antes del {fechaCorta(plan.discover.objetivo)} necesitas {formatMoney(plan.discover.porSemana)}/semana.
             </div>
           )}
-          <div className="mt-2">
-            {plan.porTarjeta.filter((t) => Number(t.saldo) > 0).map((t) => (
-              <div key={t.id} className="py-1.5" style={{ borderTop: `1px solid ${T.border}` }}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[14px]">
-                    {t.nombre}
-                    <span className="text-[11.5px] ml-1" style={{ color: T.textFaint }}>F{t.fase}{Number(t.apr) > 0 ? ` · ${t.apr}%` : ""}</span>
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="gc-code text-[14px]" style={{ color: t.restante > 0 ? T.textPrimary : T.ok }}>{t.restante > 0 ? formatMoney(t.restante) : "✓ pagada"}</span>
-                    {t.restante > 0 && tarjetaId !== t.id && (
-                      <button type="button" onClick={() => { setTarjetaId(t.id); setError(""); }} className="rounded-lg px-2.5 text-[12.5px] font-semibold" style={{ ...inputSt, minHeight: 36 }}>Pagué</button>
-                    )}
-                  </span>
-                </div>
-                {tarjetaId === t.id && (
-                  <div className="flex gap-2 mt-1.5">
-                    <input aria-label={`Pago a ${t.nombre}`} autoFocus inputMode="decimal" placeholder="Monto $" value={monto} onChange={(e) => setMonto(e.target.value)} className="gc-code flex-1 rounded-lg px-2 py-2 text-[14px] outline-none" style={inputSt} />
-                    <button type="button" onClick={() => setTarjetaId(null)} className="rounded-lg px-3 text-[13px]" style={inputSt}>×</button>
-                    <button type="button" onClick={guardar} className="rounded-lg px-3 text-[13px] font-semibold" style={btnSt}>Guardar</button>
-                  </div>
-                )}
-                {tarjetaId === t.id && error && <div className="text-[12px] mt-1" style={{ color: T.red }}>{error}</div>}
-              </div>
-            ))}
-          </div>
         </>
       ) : (
         <div className="text-[13px]" style={{ color: T.textSecondary }}>{plan.textoPlan}</div>
       )}
+      <div className="mt-2">
+        {[...plan.porTarjeta, ...sinSaldo].map((t) => (
+          <div key={t.id} className="py-1.5" style={{ borderTop: `1px solid ${T.border}` }}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[14px]">
+                {t.nombre}
+                <span className="text-[11.5px] ml-1" style={{ color: T.textFaint }}>
+                  F{t.fase}{t.diaCierre ? ` · cierra el ${t.diaCierre}` : ""}{t.ultimoCierre ? ` · al ${fechaCorta(t.ultimoCierre)}` : ""}
+                </span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="gc-code text-[14px]" style={{ color: t.saldo === 0 ? T.ok : T.textPrimary }}>{t.saldo == null ? "—" : t.saldo === 0 ? "✓ $0" : formatMoney(t.saldo)}</span>
+                {editando !== t.id && (
+                  <button type="button" onClick={() => setEditando(t.id)} className="rounded-lg px-2.5 text-[12.5px]" style={{ ...inputSt, minHeight: 36 }}>Saldo</button>
+                )}
+              </span>
+            </div>
+            {editando === t.id && <SaldoForm tarjeta={t} fechaCierre={todayISO()} onCierre={onCierre} onClose={() => setEditando(null)} />}
+          </div>
+        ))}
+      </div>
       <div className="text-[11.5px] mt-1.5" style={{ color: T.textFaint }}>Solo es un registro: RUTA no mueve dinero ni se conecta a bancos.</div>
     </Card>
   );
 }
 
-// Ajustes de las tarjetas (en Más): nombre, fase, saldo inicial, APR y fin de
-// la promo de Discover.
+// Ajustes de las tarjetas (en Más): nombre, fase, día de cierre y APR
+// (opcional, para el consejo). Los saldos se piden en cada cierre.
 export function DeudaAjustes({ deudas, onSave }) {
   const [open, setOpen] = useState(false);
   const [lista, setLista] = useState([]);
   const [promoFin, setPromoFin] = useState("");
   const [error, setError] = useState("");
   function abrir() {
-    setLista(deudas.tarjetas.map((t) => ({ ...t, saldo: String(t.saldo ?? ""), apr: String(t.apr ?? "") })));
+    setLista(deudas.tarjetas.map((t) => ({ ...t, diaCierre: String(t.diaCierre ?? ""), apr: t.apr ? String(t.apr) : "" })));
     setPromoFin(deudas.promoFin || "");
     setError("");
     setOpen(true);
@@ -230,11 +257,14 @@ export function DeudaAjustes({ deudas, onSave }) {
     for (const t of lista) {
       const nombre = String(t.nombre || "").trim();
       if (!nombre) continue;
-      const saldo = Number(t.saldo || 0), apr = Number(t.apr || 0);
-      if (!(saldo >= 0) || !(apr >= 0)) return setError(`Revisa los números de ${nombre}.`);
-      out.push({ id: t.id || makeUUID(), nombre, fase: Number(t.fase) === 2 ? 2 : 1, saldo: round2(saldo), apr: round2(apr) });
+      const dia = t.diaCierre === "" ? null : Number(t.diaCierre);
+      if (dia != null && !(Number.isInteger(dia) && dia >= 1 && dia <= 31)) return setError(`El día de cierre de ${nombre} va del 1 al 31.`);
+      const apr = Number(t.apr || 0);
+      if (!(apr >= 0)) return setError(`Revisa el APR de ${nombre}.`);
+      out.push({ id: t.id || makeUUID(), nombre, fase: Number(t.fase) === 2 ? 2 : 1, diaCierre: dia, apr: round2(apr) });
     }
-    onSave({ ...deudas, tarjetas: out, promoFin });
+    const ids = new Set(out.map((t) => t.id));
+    onSave({ ...deudas, tarjetas: out, cierres: (deudas.cierres || []).filter((c) => ids.has(c.tarjetaId)), promoFin });
     setOpen(false);
   }
   if (!open) {
@@ -247,20 +277,20 @@ export function DeudaAjustes({ deudas, onSave }) {
   }
   return (
     <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: T.surfaceRaised, border: `1px solid ${T.border}` }}>
-      <div className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Tarjetas (saldo al empezar el plan)</div>
+      <div className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Tarjetas · día de cierre · APR (opcional)</div>
       {lista.map((t, i) => (
-        <div key={t.id || i} className="grid gap-1.5" style={{ gridTemplateColumns: "1.6fr 0.7fr 1fr 0.8fr 28px" }}>
+        <div key={t.id || i} className="grid gap-1.5" style={{ gridTemplateColumns: "1.6fr 0.7fr 0.8fr 0.8fr 28px" }}>
           <input aria-label="Tarjeta" value={t.nombre} onChange={(e) => cambia(i, "nombre", e.target.value)} className="rounded-lg px-2 py-1.5 text-[13px] outline-none min-w-0" style={inputSt} />
           <select aria-label="Fase" value={t.fase} onChange={(e) => cambia(i, "fase", Number(e.target.value))} className="rounded-lg px-1 py-1.5 text-[13px] outline-none min-w-0" style={inputSt}>
             <option value={1}>F1</option>
             <option value={2}>F2</option>
           </select>
-          <input aria-label={`Saldo ${t.nombre}`} inputMode="decimal" placeholder="Saldo $" value={t.saldo} onChange={(e) => cambia(i, "saldo", e.target.value)} className="gc-code rounded-lg px-2 py-1.5 text-[13px] outline-none min-w-0" style={inputSt} />
+          <input aria-label={`Día de cierre ${t.nombre}`} inputMode="numeric" placeholder="Día" value={t.diaCierre} onChange={(e) => cambia(i, "diaCierre", e.target.value)} className="gc-code rounded-lg px-2 py-1.5 text-[13px] outline-none min-w-0" style={inputSt} />
           <input aria-label={`APR ${t.nombre}`} inputMode="decimal" placeholder="APR %" value={t.apr} onChange={(e) => cambia(i, "apr", e.target.value)} className="gc-code rounded-lg px-2 py-1.5 text-[13px] outline-none min-w-0" style={inputSt} />
           <button type="button" aria-label={`Quitar ${t.nombre}`} onClick={() => setLista((l) => l.filter((_, j) => j !== i))} className="text-[16px]" style={{ color: T.textFaint }}>×</button>
         </div>
       ))}
-      <button type="button" onClick={() => setLista((l) => [...l, { id: makeUUID(), nombre: "", fase: 1, saldo: "", apr: "" }])} className="text-[13px] underline" style={{ color: T.textSecondary, minHeight: 32 }}>+ Añadir tarjeta</button>
+      <button type="button" onClick={() => setLista((l) => [...l, { id: makeUUID(), nombre: "", fase: 1, diaCierre: "", apr: "" }])} className="text-[13px] underline" style={{ color: T.textSecondary, minHeight: 32 }}>+ Añadir tarjeta</button>
       <label className="block">
         <span className="text-[11px]" style={{ color: T.textFaint }}>Fin de la promo 0% (fase 2)</span>
         <input type="date" value={promoFin} onChange={(e) => setPromoFin(e.target.value)} className="w-full rounded-lg px-2 py-1.5 text-[13px] outline-none mt-0.5" style={inputSt} />
@@ -270,7 +300,7 @@ export function DeudaAjustes({ deudas, onSave }) {
         <button type="button" onClick={() => setOpen(false)} className="rounded-xl text-[14px]" style={{ ...inputSt, minHeight: 44 }}>Cancelar</button>
         <button type="button" onClick={guardar} className="rounded-xl text-[14px] font-semibold" style={btnSt}>Guardar</button>
       </div>
-      <div className="text-[11px]" style={{ color: T.textFaint }}>Los pagos se apuntan con «Pagué» en Resumen; aquí va el saldo de cuando empezó el plan.</div>
+      <div className="text-[11px]" style={{ color: T.textFaint }}>El día que cierra cada tarjeta, RUTA te pide en Hoy el saldo que quedó.</div>
     </div>
   );
 }
