@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ClipboardPaste, Images } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, fechaCorta } from "../../lib/earnings.js";
@@ -15,6 +15,19 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
   const fotosRef = useRef(null);
   const textoRef = useRef(null);
 
+  // Si leer fotos cerró la app (el iPhone se quedó sin memoria), al volver se
+  // dice, porque si no parece que no pasó nada.
+  const MARCA = "ruta_ocr_en_curso";
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem(MARCA);
+      if (m) {
+        localStorage.removeItem(MARCA);
+        setError(`La última vez la app se cerró mientras leía las fotos (${m}). Prueba con una sola captura, o pega su texto.`);
+      }
+    } catch {}
+  }, []);
+
   async function onFotos(e) {
     const files = [...(e.target.files || [])];
     e.target.value = "";
@@ -23,7 +36,10 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
     setPlan(null);
     try {
       const { readCaptureImages } = await import("../../lib/ocr.js");
-      const r = await readCaptureImages(files, routes, setLeyendo);
+      const r = await readCaptureImages(files, routes, (t) => {
+        setLeyendo(t);
+        try { localStorage.setItem(MARCA, t); } catch {}
+      });
       setTexto(r.text || "");
       if (!r.ok) return setError(r.error);
       setPlataforma(r.plataforma);
@@ -31,6 +47,7 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
     } catch (err) {
       setError("No pude leer las fotos (" + (err.message || err) + "). Pega el texto de la captura.");
     } finally {
+      try { localStorage.removeItem(MARCA); } catch {}
       setLeyendo("");
     }
   }
