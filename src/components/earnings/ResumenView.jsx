@@ -2,10 +2,12 @@ import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2, todayISO } from "../../lib/earnings.js";
-import { periodo, moverPeriodo, resumenPeriodo } from "../../lib/resumen.js";
-import { Card, Eyebrow, NetoHero, Deducciones, Segmented, APP_COLOR } from "./ui.jsx";
+import { periodo, moverPeriodo, resumenPeriodo, resumenDia, promedioDia } from "../../lib/resumen.js";
+import { platformOf, platformLabel, isCleaning } from "../../lib/platforms.js";
+import { Card, Eyebrow, NetoHero, Deducciones, Segmented, AppBadge, APP_COLOR } from "./ui.jsx";
 
 const TIPOS = [
+  { id: "día", label: "Día" },
   { id: "semana", label: "Semana" },
   { id: "mes", label: "Mes" },
   { id: "año", label: "Año" },
@@ -15,9 +17,16 @@ const TIPOS = [
 // comparación con el periodo anterior, últimos periodos y reparto por app.
 export default function ResumenView({ datos, startDow }) {
   const [p, setP] = useState(() => periodo("semana", todayISO(), startDow));
-  const { actual: r, anterior: a, serie } = useMemo(() => resumenPeriodo(datos, p, startDow), [datos, p, startDow]);
+  const esDia = p.tipo === "día";
+  const { actual: r, anterior: a, serie } = useMemo(() => {
+    if (!esDia) return resumenPeriodo(datos, p, startDow);
+    // Un día se compara con tu día promedio, no con el de ayer (puede ser libre).
+    const base = resumenPeriodo(datos, p, startDow, 7);
+    return { ...base, anterior: promedioDia(datos, p.desde) };
+  }, [datos, p, startDow, esDia]);
+  const dia = useMemo(() => (esDia ? resumenDia(datos, p.desde) : null), [datos, p, esDia]);
   const maxSerie = Math.max(...serie.map((s) => Math.abs(s.neto)), 1);
-  const nombre = p.tipo === "semana" ? "semana" : p.tipo === "mes" ? "mes" : "año";
+  const nombre = { día: "día", semana: "semana", mes: "mes", año: "año" }[p.tipo];
 
   return (
     <div className="space-y-3">
@@ -38,8 +47,9 @@ export default function ResumenView({ datos, startDow }) {
         </Card>
       ) : (
         <>
-          <NetoHero r={r} />
-          <Deducciones d={r.deducciones} gasolinaPagada={r.gasolinaPagada} />
+          <NetoHero r={r} netoLabel={esDia ? "Neto del día" : "Neto"} />
+          {esDia && <LineaDeTiempo lista={dia.lista} jornadas={(datos.jornadas || []).filter((j) => j.fecha === p.desde)} />}
+          <Deducciones d={r.deducciones} gasolinaPagada={r.gasolinaPagada} titulo={esDia ? "Deducciones del día" : "Deducciones"} />
         </>
       )}
 
@@ -48,7 +58,7 @@ export default function ResumenView({ datos, startDow }) {
         <div className="grid gap-x-2 gap-y-1.5 text-[13px] items-baseline" style={{ gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
           <span />
           <span className="text-right text-[11.5px]" style={{ color: T.textFaint }}>Este</span>
-          <span className="text-right text-[11.5px]" style={{ color: T.textFaint }}>Anterior</span>
+          <span className="text-right text-[11.5px]" style={{ color: T.textFaint }}>{esDia ? "Promedio" : "Anterior"}</span>
           <span className="text-right text-[11.5px]" style={{ color: T.textFaint }}>Cambio</span>
           <Fila label="Ganado" a={r.ganado} b={a.ganado} money />
           <Fila label="Neto" a={r.neto} b={a.neto} money />
@@ -57,7 +67,7 @@ export default function ResumenView({ datos, startDow }) {
           <Fila label="Millas" a={Math.round(r.millas)} b={Math.round(a.millas)} neutral />
         </div>
         <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${T.border}` }}>
-          <div className="text-[12.5px] mb-2" style={{ color: T.textFaint }}>Neto de los últimos periodos</div>
+          <div className="text-[12.5px] mb-2" style={{ color: T.textFaint }}>{esDia ? "Neto de los últimos 7 días" : "Neto de los últimos periodos"}</div>
           <div className="flex items-end gap-2" style={{ height: 110 }}>
             {serie.map((s, i) => {
               const ult = i === serie.length - 1;
@@ -109,5 +119,60 @@ function Fila({ label, a, b, money, neutral }) {
       <span className="gc-code text-right" style={{ color: T.textSecondary }}>{fmt(b)}</span>
       <span className="gc-code text-right" style={{ color }}>{txt}</span>
     </>
+  );
+}
+
+// Lo que hiciste en orden: salí, cada trabajo, paré, llegué.
+function LineaDeTiempo({ lista, jornadas }) {
+  const items = [];
+  for (const j of jornadas) {
+    items.push({ hora: j.horaSalida, texto: `Salí de casa · ${Number(j.odoSalida).toLocaleString("en-US")}`, tipo: "casa" });
+    if (j.horaParada) items.push({ hora: j.horaParada, texto: "Paré de trabajar", tipo: "casa" });
+    if (j.horaLlegada) items.push({ hora: j.horaLlegada, texto: `Llegué a casa · ${Number(j.odoLlegada).toLocaleString("en-US")}`, tipo: "casa" });
+  }
+  for (const r of lista) {
+    const bloques = r.bloques?.length ? r.bloques : [{ horaInicio: r.horaInicio, horaFin: r.horaFin, pago: r.pagoBase, propina: r.propina }];
+    for (const b of bloques) {
+      const total = (Number(b.pago) || 0) + (Number(b.propina) || 0);
+      items.push({
+        hora: b.horaInicio || "",
+        fin: b.horaFin,
+        app: platformOf(r),
+        texto: isCleaning(r) ? `Limpieza ${r.local || ""}` : r.nota || "",
+        importe: isCleaning(r) ? null : bloques.length > 1 ? total : Number(r.ganancia) || 0,
+        propina: Number(b.propina) || 0,
+      });
+    }
+  }
+  items.sort((x, y) => (x.hora || "99").localeCompare(y.hora || "99"));
+  if (!items.length) return null;
+  return (
+    <Card>
+      <Eyebrow>Tu día, en orden</Eyebrow>
+      <ol className="space-y-2">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <span className="gc-code text-[12.5px] w-[44px] shrink-0 pt-0.5" style={{ color: T.textSecondary }}>{it.hora || "—"}</span>
+            <span className="flex-1 text-[13.5px]">
+              {it.app ? (
+                <>
+                  <AppBadge plataforma={it.app} label={platformLabel(it.app)} />{" "}
+                  {it.fin && <span style={{ color: T.textSecondary }}>hasta {it.fin} </span>}
+                  {it.texto && <span style={{ color: T.textFaint }}>· {it.texto}</span>}
+                </>
+              ) : (
+                <span style={{ color: T.textPrimary }}>{it.texto}</span>
+              )}
+            </span>
+            {it.importe != null && (
+              <span className="gc-code text-[13.5px] text-right">
+                {formatMoney(it.importe)}
+                {it.propina > 0 && <span className="block text-[11px]" style={{ color: T.textFaint }}>propina {formatMoney(it.propina)}</span>}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }

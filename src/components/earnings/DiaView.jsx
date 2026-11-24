@@ -2,19 +2,12 @@ import React, { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2 } from "../../lib/earnings.js";
-import { resumenDia, addDays } from "../../lib/resumen.js";
+import { resumenDia, addDays, nombreDia } from "../../lib/resumen.js";
 import { jornadaMiles } from "../../lib/jornada.js";
 import { vehicleLabel } from "../../lib/vehicles.js";
 import { Card, Eyebrow, NetoHero, Deducciones } from "./ui.jsx";
 
-const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-export function nombreDia(fecha) {
-  const [y, m, d] = fecha.split("-").map(Number);
-  const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  return `${DIAS[wd][0].toUpperCase()}${DIAS[wd].slice(1)} ${d} ${MESES[m - 1]}`;
-}
+export { nombreDia };
 
 // Un día por dentro: neto, deducciones, jornada y cada trabajo (editable con
 // `renderRegistro`, que pinta la tarjeta de siempre).

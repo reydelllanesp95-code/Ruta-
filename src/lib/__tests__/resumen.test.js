@@ -86,3 +86,19 @@ describe('horas con jornada y «paré de trabajar»', () => {
     expect(horasJornada({ horaSalida: '06:00' })).toBe(null);
   });
 });
+
+describe('día en Resumen', () => {
+  it('periodo día y moverse', async () => {
+    const p = periodo('día', '2025-03-01');
+    expect(p).toMatchObject({ desde: '2025-03-01', hasta: '2025-03-01', label: 'Sábado 1 mar' });
+    expect(moverPeriodo(p, -1)).toMatchObject({ desde: '2025-02-28', label: 'Viernes 28 feb' });
+  });
+  it('promedio por día trabajado de las 4 semanas previas', async () => {
+    const { promedioDia } = await import('../resumen.js');
+    const d = { routes: [t('2025-03-01', 'flex', 100, 0, 0), t('2025-03-05', 'flex', 200, 0, 0), t('2025-03-20', 'flex', 50, 0, 0)], configFor: () => cfg };
+    const p = promedioDia(d, '2025-03-20');
+    expect(p.dias).toBe(2);
+    expect(p.ganado).toBe(150);
+    expect(p.horas).toBe(2);
+  });
+});
