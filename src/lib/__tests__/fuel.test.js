@@ -206,3 +206,19 @@ describe("backup con fuelups (localStorage simulado)", () => {
     expect(await storage.loadJSON("ruta_fuelups_v1", null)).toEqual([]);
   });
 });
+
+describe("fuelSpendForKey", () => {
+  it("suma lo pagado de la semana de pago y del mes, de los dos carros", async () => {
+    const { fuelSpendForKey, makeFuelup } = await import("../fuel.js");
+    const fu = [
+      makeFuelup({ fecha: "2025-03-01", costo: 30, vehiculo: "kia" }), // sáb: empieza semana
+      makeFuelup({ fecha: "2025-03-06", costo: 20, vehiculo: "tucson" }),
+      makeFuelup({ fecha: "2025-03-08", costo: 40, vehiculo: "kia" }), // sáb: semana siguiente
+      makeFuelup({ fecha: "2025-02-27", costo: 10, vehiculo: "kia" }),
+    ];
+    expect(fuelSpendForKey(fu, "2025-03-01", 6)).toBe(50);
+    expect(fuelSpendForKey(fu, "2025-03-08", 6)).toBe(40);
+    expect(fuelSpendForKey(fu, "2025-03", 6)).toBe(90);
+    expect(fuelSpendForKey(fu, "2025-01", 6)).toBe(0);
+  });
+});

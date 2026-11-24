@@ -3,7 +3,7 @@ import { DollarSign, Package, MapPin, Navigation, Clock } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2 } from "../../lib/earnings.js";
 
-function Card({ title, totals, gastos = 0 }) {
+function Card({ title, totals, gastos = 0, gasolina = 0 }) {
   return (
     <div
       className="flex-1 rounded-xl p-3"
@@ -70,6 +70,16 @@ function Card({ title, totals, gastos = 0 }) {
           </span>
         </div>
       )}
+      {gasolina > 0 && (
+        <div className="mt-1 flex items-baseline justify-between">
+          <span className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
+            Gasolina pagada
+          </span>
+          <span className="gc-code text-[13px]" style={{ color: T.textSecondary }}>
+            {formatMoney(gasolina)}
+          </span>
+        </div>
+      )}
       {totals.propinas > 0 && (
         <div className="mt-1 flex items-baseline justify-between">
           <span className="text-[10px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
@@ -91,11 +101,13 @@ export default function StatsCards({
   mesLabel = "Este mes",
   gastosSemana = 0,
   gastosMes = 0,
+  gasolinaSemana = 0,
+  gasolinaMes = 0,
 }) {
   return (
     <div className="flex gap-2.5">
-      <Card title={semanaLabel} totals={semana} gastos={gastosSemana} />
-      <Card title={mesLabel} totals={mes} gastos={gastosMes} />
+      <Card title={semanaLabel} totals={semana} gastos={gastosSemana} gasolina={gasolinaSemana} />
+      <Card title={mesLabel} totals={mes} gastos={gastosMes} gasolina={gasolinaMes} />
     </div>
   );
 }

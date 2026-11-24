@@ -214,3 +214,11 @@ export function fuelSpendByPeriod(fuelups, weekStartDow = 6) {
     porMes: toArr(meses),
   };
 }
+
+// Gasto de gasolina (lo pagado, ambos carros) de una semana de pago (clave =
+// fecha de inicio) o de un mes (clave YYYY-MM).
+export function fuelSpendForKey(fuelups, key, weekStartDow = 6) {
+  const g = fuelSpendByPeriod(fuelups, weekStartDow);
+  const lista = /^\d{4}-\d{2}-\d{2}$/.test(String(key)) ? g.porSemana : g.porMes;
+  return (lista.find((x) => x.key === key) || { gasto: 0 }).gasto;
+}
