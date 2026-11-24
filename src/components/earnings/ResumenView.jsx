@@ -40,9 +40,9 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
     const saldo = mv.fondo.saldoPara(p.desde);
     return {
       n,
-      estado: estadoSemana(n.neta, mv.u, { saldoFondo: saldo, deudas: mv.deudas }),
-      hist: historialMeta(datos, p.desde, mv.u, 8, mv.fondo),
-      compensa: p.hasta < hoy ? compensacion(datos, mv.u, saldo, p, hoy) : false,
+      estado: estadoSemana(n.neta, mv.u, { saldoFondo: saldo, deudas: mv.deudas, desde: p.desde }),
+      hist: historialMeta(datos, p.desde, mv.u, 8, mv.fondo, mv.deudas),
+      compensa: p.hasta < hoy ? compensacion(datos, mv.u, saldo, p, hoy, mv.deudas) : false,
     };
   }, [datos, p, esSemana, mv, hoy]);
   const refMes = p.tipo === "mes" ? p.desde : p.hasta < hoy ? p.hasta : hoy;
@@ -75,7 +75,7 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
         <SemanaPasada
           semana={{ ...sem.n, label: p.label }}
           estado={sem.estado}
-          u={mv.u}
+          u={sem.estado.u}
           compensa={sem.compensa}
           hecho={Boolean(mv.metaReg[p.desde]?.hecho)}
           onHecho={() => mv.onHecho(p.desde, sem.estado.reparto)}
@@ -83,7 +83,7 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
       )}
       {mes && <MetaMesCard mes={mes} hist={histMeses} />}
       {sem && <FondoCard fondo={mv.fondo} u={mv.u} usos={mv.usos} onUsar={mv.onUsarFondo} />}
-      {sem && <DeudaCard plan={mv.plan} onPague={mv.onPague} />}
+      {sem && <DeudaCard plan={mv.plan} deudas={mv.deudas} onCierre={mv.onCierre} />}
 
       {r.registros === 0 ? (
         <Card>

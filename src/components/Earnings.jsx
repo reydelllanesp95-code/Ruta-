@@ -56,8 +56,8 @@ import ResumenView from "./earnings/ResumenView.jsx";
 import DiaView, { nombreDia } from "./earnings/DiaView.jsx";
 import { Card, Eyebrow, Row, Mini, Segmented } from "./earnings/ui.jsx";
 import SemanaPasada from "./earnings/SemanaPasada.jsx";
-import { MetaSemanaCard, DeudaAjustes } from "./earnings/MetaV2.jsx";
-import { netaMeta, umbralesDe, estadoSemana, fondoColchon, planDeuda, compensacion, hitosNuevos, marcarAvisados, TEXTO_AVISO, MENSAJE_FONDO_LLENO } from "../lib/meta.js";
+import { MetaSemanaCard, DeudaAjustes, CierresPendientes } from "./earnings/MetaV2.jsx";
+import { netaMeta, umbralesDe, estadoSemana, fondoColchon, planDeuda, compensacion, hitosNuevos, marcarAvisados, TEXTO_AVISO, MENSAJE_FONDO_LLENO, sanitizeDeudas } from "../lib/meta.js";
 import { periodo, resumenRango, propinasPendientes, filasAño, addDays, gasPorMilla } from "../lib/resumen.js";
 import { withJornadaMiles } from "../lib/jornada.js";
 import {
@@ -119,7 +119,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         storage.loadJSON(KEY_AVISOS, {}),
       ]);
       const cargarMetaV2 = () => {
-        setDeudas(de && Array.isArray(de.tarjetas) ? { pagos: [], promoFin: "", ...de } : DEUDA_DEFAULT);
+        setDeudas(de && Array.isArray(de.tarjetas) ? sanitizeDeudas(de, cfg.plan_inicio) : DEUDA_DEFAULT);
         setFondoUsos(fo && Array.isArray(fo.usos) ? fo.usos : []);
         setAvisos(av && typeof av === "object" ? av : {});
       };
@@ -181,6 +181,9 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   function persistDeudas(next) {
     setDeudas(next);
     guardarEn(KEY_DEUDA, "la deuda")(next);
+  }
+  function apuntarCierre(cierre) {
+    persistDeudas({ ...deudas, cierres: [...(deudas.cierres || []).filter((c) => !(c.tarjetaId === cierre.tarjetaId && c.fecha === cierre.fecha)), cierre] });
   }
   function usarFondo(uso) {
     const next = [...fondoUsos, uso];
@@ -432,7 +435,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         storage.loadJSON(KEY_AVISOS, {}),
       ]);
       const cargarMetaV2 = () => {
-        setDeudas(de && Array.isArray(de.tarjetas) ? { pagos: [], promoFin: "", ...de } : DEUDA_DEFAULT);
+        setDeudas(de && Array.isArray(de.tarjetas) ? sanitizeDeudas(de, cfg.plan_inicio) : DEUDA_DEFAULT);
         setFondoUsos(fo && Array.isArray(fo.usos) ? fo.usos : []);
         setAvisos(av && typeof av === "object" ? av : {});
       };
@@ -468,14 +471,14 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   const fondo = useMemo(() => fondoColchon(datos, umbrales, fondoUsos, hoy), [datos, umbrales, fondoUsos, hoy]);
   const plan = useMemo(() => planDeuda(deudas, umbrales, hoy), [deudas, umbrales, hoy]);
   const metaSemana = useMemo(() => netaMeta(datos, semM.desde, semM.hasta, hoy), [datos, semM.desde, semM.hasta, hoy]);
-  const estadoHoy = useMemo(() => estadoSemana(metaSemana.neta, umbrales, { saldoFondo: fondo.saldoPara(semM.desde), deudas }), [metaSemana.neta, umbrales, fondo, semM.desde, deudas]);
+  const estadoHoy = useMemo(() => estadoSemana(metaSemana.neta, umbrales, { saldoFondo: fondo.saldoPara(semM.desde), deudas, desde: semM.desde }), [metaSemana.neta, umbrales, fondo, semM.desde, deudas]);
   const metaPrev = useMemo(() => {
     const n = { ...netaMeta(datos, prevP.desde, prevP.hasta), label: prevP.label };
     const saldo = fondo.saldoPara(prevP.desde);
-    return { n, estado: estadoSemana(n.neta, umbrales, { saldoFondo: saldo, deudas }), compensa: compensacion(datos, umbrales, saldo, prevP, hoy) };
+    return { n, estado: estadoSemana(n.neta, umbrales, { saldoFondo: saldo, deudas, desde: prevP.desde }), compensa: compensacion(datos, umbrales, saldo, prevP, hoy, deudas) };
   }, [datos, prevP.desde, prevP.hasta, prevP.label, fondo, umbrales, deudas, hoy]);
   const metaProps = useMemo(
-    () => ({ u: umbrales, fondo, usos: fondoUsos, deudas, plan, metaReg, onHecho: marcarHecho, onUsarFondo: usarFondo, onPague: (pago) => persistDeudas({ ...deudas, pagos: [...(deudas.pagos || []), pago] }) }),
+    () => ({ u: umbrales, fondo, usos: fondoUsos, deudas, plan, metaReg, onHecho: marcarHecho, onUsarFondo: usarFondo, onCierre: apuntarCierre }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [umbrales, fondo, fondoUsos, deudas, plan, metaReg]
   );
@@ -626,11 +629,12 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         {tab === "hoy" && (
           <>
             <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} compact />
+            {plan.pendientes.length > 0 && <CierresPendientes pendientes={plan.pendientes} onCierre={apuntarCierre} />}
             {metaPrev.n.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
               <SemanaPasada
                 semana={metaPrev.n}
                 estado={metaPrev.estado}
-                u={umbrales}
+                u={metaPrev.estado.u}
                 compensa={metaPrev.compensa}
                 hecho={false}
                 onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}

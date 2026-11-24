@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   netaMeta, estadoSemana, hitosSemana, hitosMes, fondoColchon, mesMeta, compensacion, historialMeta,
   historialMeses, planDeuda, hitosNuevos, marcarAvisados, umbralesDe, UMBRALES_DEFAULT, MENSAJE_COMPENSACION,
+  cierresPendientes, sanitizeDeudas,
 } from '../meta.js';
 import { makeShift } from '../platforms.js';
 
@@ -9,13 +10,19 @@ import { makeShift } from '../platforms.js';
 const turno = (fecha, pago, propina = 0, plataforma = 'flex') =>
   makeShift({ plataforma, vehiculo: 'kia', fecha, horaInicio: '08:00', horaFin: '10:00', pago: String(pago), propina: String(propina), millas: '' });
 const U = UMBRALES_DEFAULT;
+// Decisión de Rey (24-nov-2026, por voz): las tarjetas llevan día de cierre y
+// saldos de cierre en vez de pagos sueltos.
 const deudas = {
   tarjetas: [
-    { id: 'a', nombre: 'Chase Prime', fase: 1, saldo: 2000, apr: 24 },
-    { id: 'b', nombre: 'Capital One', fase: 1, saldo: 1500, apr: 29.9 },
-    { id: 'c', nombre: 'Discover', fase: 2, saldo: 7700, apr: 0 },
+    { id: 'a', nombre: 'Chase Prime', fase: 1, diaCierre: 5, apr: 24 },
+    { id: 'b', nombre: 'Capital One', fase: 1, diaCierre: 12, apr: 29.9 },
+    { id: 'c', nombre: 'Discover', fase: 2, diaCierre: 20, apr: 0 },
   ],
-  pagos: [],
+  cierres: [
+    { tarjetaId: 'a', fecha: '2025-03-01', saldo: 2000 },
+    { tarjetaId: 'b', fecha: '2025-03-01', saldo: 1500 },
+    { tarjetaId: 'c', fecha: '2025-03-01', saldo: 7700 },
+  ],
 };
 
 describe('criterios de la meta v2', () => {
@@ -37,7 +44,7 @@ describe('criterios de la meta v2', () => {
     expect(e.reparto.excedente).toBe(100);
     expect(e.consejo).toMatch(/Tienes \$100(\.00)? de más\. Recomendado: todo a Capital One\./);
     // Fase 2 (fase 1 pagada): mitad a Discover, mitad a ahorro.
-    const pagadas = { ...deudas, pagos: [{ tarjetaId: 'a', monto: 2000 }, { tarjetaId: 'b', monto: 1500 }] };
+    const pagadas = { ...deudas, cierres: [...deudas.cierres, { tarjetaId: 'a', fecha: '2025-04-05', saldo: 0 }, { tarjetaId: 'b', fecha: '2025-04-12', saldo: 0 }] };
     expect(estadoSemana(1000, U, { saldoFondo: 0, deudas: pagadas }).consejo).toMatch(/mitad a Discover, mitad a ahorro para la casa/);
   });
   it('4. fondo en $500 y neta $760 → deuda cubierta, sin tramo de colchón', () => {
@@ -134,18 +141,72 @@ describe('meta v2: resto', () => {
   });
   it('plan de deuda: semanas por delante/detrás y Discover 3 semanas antes', () => {
     const u = { ...U, planInicio: '2025-03-03', planMeses: 5 };
-    const d = { ...deudas, promoFin: '2025-09-30', pagos: [{ tarjetaId: 'b', fecha: '2025-03-05', monto: 1500 }] };
+    const d = { ...deudas, promoFin: '2025-09-30', cierres: [...deudas.cierres, { tarjetaId: 'b', fecha: '2025-03-12', saldo: 0 }] };
     const p = planDeuda(d, u, '2025-03-17'); // 2 semanas
     expect(p.total).toBe(11200);
+    expect(p.restante).toBe(9700);
     expect(p.semanal).toBe(516.92); // 11200 / (5·52/12)
-    expect(p.semanasDiff).toBe(1); // pagó 1500, tocaba 1033.85
+    expect(p.semanasDiff).toBe(1); // tocaba quedar 10166.15; quedan 9700
     expect(p.textoPlan).toBe('Vas 1 semana por delante del plan de 5 meses.');
-    expect(p.fase).toBe(1);
-    expect(p.porTarjeta.find((t) => t.id === 'b').restante).toBe(0);
+    expect(p.porTarjeta.find((t) => t.id === 'b').saldo).toBe(0);
     expect(p.discover.objetivo).toBe('2025-09-09');
-    expect(planDeuda({ tarjetas: [], pagos: [] }, u, '2025-03-17').textoPlan).toMatch(/Apunta tus tarjetas/);
+    expect(planDeuda({ tarjetas: [], cierres: [] }, u, '2025-03-17').textoPlan).toMatch(/Pon tus tarjetas/);
     // Tarjetas sin saldo apuntado → fase 1 y consejo genérico.
-    const vacias = { tarjetas: deudas.tarjetas.map((t) => ({ ...t, saldo: 0 })), pagos: [] };
+    const vacias = { tarjetas: deudas.tarjetas, cierres: [] };
     expect(estadoSemana(1000, U, { saldoFondo: 0, deudas: vacias }).consejo).toMatch(/todo a la tarjeta con mayor interés/);
+  });
+});
+
+describe('criterios del plan por cierres', () => {
+  const u = { ...U, planInicio: '2025-01-06', planMeses: 5 };
+  const d = (saldo) => ({ tarjetas: [{ id: 'x', nombre: 'Chase', fase: 1, diaCierre: 15 }], cierres: [{ tarjetaId: 'x', fecha: '2025-01-06', saldo: 14000 }, { tarjetaId: 'x', fecha: '2025-03-10', saldo }] });
+  const semana10 = '2025-03-17'; // lunes, 10 semanas después del inicio
+  it('1. adelantado: cuota $514.29, inversión $265.71, meta $900', () => {
+    const e = estadoSemana(0, u, { saldoFondo: 0, deudas: d(6000), desde: semana10 });
+    expect(e.cuota.cuota).toBe(514.29);
+    expect(e.u.deuda).toBe(514.29);
+    expect(e.u.inversion).toBe(265.71);
+    expect(e.hitos.meta).toBe(900);
+    expect(e.textoCuota).toMatch(/adelantado.*\$514\.29.*\$165\.71 más van a inversión/);
+    expect(e.u.inversiones.find((x) => x.nombre === 'VOO').monto).toBe(106.28); // 40 · 2.6571
+  });
+  it('2. atrasado: cuota $857.14 y la meta sube a $1,077.14', () => {
+    const e = estadoSemana(0, u, { saldoFondo: 0, deudas: d(10000), desde: semana10 });
+    expect(e.cuota.cuota).toBe(857.14);
+    expect(e.hitos.meta).toBe(1077.14);
+    expect(e.textoCuota).toMatch(/atrasado.*sube a \$857\.14/);
+  });
+  it('3. aviso de cierre: pide el saldo hasta que se apunta; vuelve el mes siguiente', () => {
+    const t = { tarjetas: [{ id: 'x', nombre: 'Chase', fase: 1, diaCierre: 15 }], cierres: [] };
+    expect(cierresPendientes(t, '2026-11-24').map((p) => p.fechaCierre)).toEqual(['2026-11-15']);
+    const con = { ...t, cierres: [{ tarjetaId: 'x', fecha: '2026-11-24', saldo: 900 }] };
+    expect(cierresPendientes(con, '2026-11-24')).toEqual([]);
+    expect(cierresPendientes(con, '2026-12-10')).toEqual([]);
+    expect(cierresPendientes(con, '2026-12-16').map((p) => p.fechaCierre)).toEqual(['2026-12-15']);
+    // Día 31 en un mes de 30: cierra el último día.
+    const t31 = { tarjetas: [{ id: 'y', nombre: 'PNC', fase: 1, diaCierre: 31 }], cierres: [] };
+    expect(cierresPendientes(t31, '2026-12-01').map((p) => p.fechaCierre)).toEqual(['2026-11-30']);
+  });
+  it('4. sin saldos apuntados la meta queda en 80 / 760 / 860 / 900', () => {
+    const e = estadoSemana(0, U, { saldoFondo: 0, deudas: { tarjetas: [{ id: 'x', nombre: 'Chase', fase: 1, diaCierre: 15 }], cierres: [] }, desde: '2026-11-23' });
+    expect([e.hitos.h.colchon, e.hitos.h.deuda, e.hitos.h.inversion, e.hitos.h.meta]).toEqual([80, 760, 860, 900]);
+    expect(e.textoCuota).toBe('');
+  });
+  it('5. un saldo nuevo no cambia las semanas pasadas', () => {
+    const antes = estadoSemana(0, u, { deudas: d(6000), desde: '2025-03-10' }); // el cierre del 10 no cuenta en su propia semana
+    expect(antes.cuota.restante).toBe(14000);
+    const despues = estadoSemana(0, u, { deudas: { ...d(6000), cierres: [...d(6000).cierres, { tarjetaId: 'x', fecha: '2025-03-20', saldo: 1 }] }, desde: '2025-03-10' });
+    expect(despues.cuota).toEqual(antes.cuota);
+  });
+  it('falta el saldo de una tarjeta → cuota base y aviso', () => {
+    const dos = { tarjetas: [...d(6000).tarjetas, { id: 'z', nombre: 'PNC', fase: 1, diaCierre: 3 }], cierres: d(6000).cierres };
+    expect(estadoSemana(0, u, { deudas: dos, desde: semana10 }).cuota).toBe(null);
+    expect(planDeuda(dos, u, semana10).textoPlan).toMatch(/Falta el saldo de PNC/);
+  });
+  it('6. tarjetas guardadas con saldo pasan a un primer cierre', () => {
+    const viejo = { tarjetas: [{ id: 'cap', nombre: 'Capital One', fase: 1, saldo: 2000, apr: 29.9 }, { id: 'pnc', nombre: 'PNC', fase: 1, saldo: 0, apr: 0 }], pagos: [] };
+    const n = sanitizeDeudas(viejo, '2026-11-23');
+    expect(n.cierres).toEqual([{ id: 'cap-inicio', tarjetaId: 'cap', fecha: '2026-11-23', saldo: 2000 }]);
+    expect(n.tarjetas.map((t) => [t.nombre, t.diaCierre, t.apr])).toEqual([['Capital One', null, 29.9], ['PNC', null, 0]]);
   });
 });
