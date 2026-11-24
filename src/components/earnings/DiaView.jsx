@@ -50,8 +50,9 @@ export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, rende
         <Card>
           <Eyebrow>Jornada</Eyebrow>
           {delDia.map((j) => (
-            <div key={j.id} className="grid grid-cols-2 gap-2 mb-1">
+            <div key={j.id} className={`grid gap-2 mb-1 ${j.horaParada ? "grid-cols-3" : "grid-cols-2"}`}>
               <Caja titulo="Salí" hora={j.horaSalida} odo={j.odoSalida} />
+              {j.horaParada && <Caja titulo="Paré" hora={j.horaParada} />}
               <Caja titulo="Llegué" hora={j.horaLlegada || "—"} odo={j.odoLlegada} />
             </div>
           ))}
