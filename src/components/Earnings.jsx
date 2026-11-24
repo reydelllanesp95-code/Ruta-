@@ -392,8 +392,8 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   const hoy = todayISO();
   const startDow = config.pay_week_start_day;
   const datos = useMemo(
-    () => ({ routes: routesVista, meals, tolls, fuelups, maints, configFor }),
-    [routesVista, meals, tolls, fuelups, maints, configFor]
+    () => ({ routes: routesVista, meals, tolls, fuelups, maints, jornadas, configFor }),
+    [routesVista, meals, tolls, fuelups, maints, jornadas, configFor]
   );
   const hoyR = useMemo(() => resumenRango(datos, hoy, hoy), [datos, hoy]);
   const semanaP = periodo("semana", hoy, startDow);

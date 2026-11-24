@@ -70,3 +70,19 @@ describe('propinas pendientes y año', () => {
     expect(filas).toContainEqual(['millas de trabajo', '110.0']);
   });
 });
+
+describe('horas con jornada y «paré de trabajar»', () => {
+  const base = { routes: [t('2025-03-08', 'flex', 40, 0, 0, '08:00', '11:00')], configFor: () => cfg };
+  const j = { id: 'j', fecha: '2025-03-08', vehiculo: 'kia', horaSalida: '06:00', odoSalida: 1, horaLlegada: '18:00', odoLlegada: 2 };
+  it('paré 14:00 → 8 h; sin paré → 12 h; sin jornada → 3 h', async () => {
+    const { pararTrabajo, seguirTrabajando } = await import('../jornada.js');
+    expect(resumenRango({ ...base, jornadas: [pararTrabajo(j, '14:00')] }, '2025-03-08', '2025-03-08').horas).toBe(8);
+    expect(resumenRango({ ...base, jornadas: [seguirTrabajando(pararTrabajo(j, '14:00'))] }, '2025-03-08', '2025-03-08').horas).toBe(12);
+    expect(resumenRango(base, '2025-03-08', '2025-03-08').horas).toBe(3);
+  });
+  it('cruza medianoche', async () => {
+    const { horasJornada } = await import('../jornada.js');
+    expect(horasJornada({ horaSalida: '20:00', horaParada: '01:30' })).toBe(5.5);
+    expect(horasJornada({ horaSalida: '06:00' })).toBe(null);
+  });
+});

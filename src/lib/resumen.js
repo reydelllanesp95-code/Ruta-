@@ -4,6 +4,7 @@
 
 import { round2, routeEconomics, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
 import { deliveryOnly, platformOf, platformLabel, isShift } from "./platforms.js";
+import { horasJornada } from "./jornada.js";
 
 function iso(d) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -48,9 +49,17 @@ function costoReal(v) {
 }
 
 // datos: { routes (con millas de jornada ya repartidas), meals, tolls,
-// fuelups, configFor }. Devuelve los totales del rango [desde, hasta].
+// fuelups, jornadas, configFor }. Devuelve los totales del rango [desde, hasta].
+// Las horas de un día con jornada son las de la jornada (salida → «paré» o
+// llegada); sin jornada, las de sus turnos.
 export function resumenRango(datos, desde, hasta) {
-  const { routes = [], meals = [], tolls = [], fuelups = [], configFor } = datos;
+  const { routes = [], meals = [], tolls = [], fuelups = [], jornadas = [], configFor } = datos;
+  const horasDia = new Map();
+  for (const j of jornadas) {
+    if (!enRango(j.fecha, desde, hasta)) continue;
+    const h = horasJornada(j);
+    if (h != null) horasDia.set(j.fecha, round2((horasDia.get(j.fecha) || 0) + h));
+  }
   const regs = deliveryOnly(routes).filter((r) => enRango(r.fecha, desde, hasta));
   let ganado = 0, propinas = 0, horas = 0, millas = 0, gasolina = 0, mantenimiento = 0;
   const apps = new Map();
@@ -61,7 +70,7 @@ export function resumenRango(datos, desde, hasta) {
     const h = Number(r.horasReales) > 0 ? Number(r.horasReales) : Number(r.horas) > 0 ? Number(r.horas) : 0;
     ganado += g;
     propinas += Number(r.propina) || 0;
-    horas += h;
+    if (!horasDia.has(r.fecha)) horas += h;
     millas += Number(r.millas) || 0;
     gasolina += eco.fuel_cost;
     mantenimiento += eco.maintenance_est;
@@ -73,6 +82,7 @@ export function resumenRango(datos, desde, hasta) {
     a.registros += 1;
     apps.set(k, a);
   }
+  for (const [f, h] of horasDia) if (dias.has(f)) horas += h;
   const comida = meals.filter((m) => enRango(String(m.fecha), desde, hasta)).reduce((s, m) => s + costoReal(m.costo), 0);
   const peajes = tolls.filter((t) => enRango(String(t.fecha), desde, hasta)).reduce((s, t) => s + costoReal(t.monto), 0);
   const gasolinaPagada = fuelups.filter((f) => enRango(String(f.fecha), desde, hasta)).reduce((s, f) => s + costoReal(f.costo), 0);

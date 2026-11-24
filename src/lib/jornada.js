@@ -69,3 +69,28 @@ export function withJornadaMiles(routes, jornadas) {
     return { ...r, millas: x.millas, ...(x.vehiculo ? { vehiculo: x.vehiculo } : {}), millasDeJornada: true };
   });
 }
+
+// «Paré de trabajar»: desde aquí hasta llegar a casa no son horas de trabajo.
+export function pararTrabajo(j, hora) {
+  return { ...j, horaParada: hora };
+}
+
+// «Volví a trabajar»: anula la parada.
+export function seguirTrabajando(j) {
+  const { horaParada, ...resto } = j;
+  return resto;
+}
+
+function minutos(hhmm) {
+  const m = String(hhmm || "").match(/^(\d{1,2}):(\d{2})$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+// Horas de trabajo de la jornada: salida → parada (o llegada). Null si aún no
+// hay fin.
+export function horasJornada(j) {
+  const a = minutos(j && j.horaSalida);
+  const b = minutos((j && j.horaParada) || (j && j.horaLlegada));
+  if (a == null || b == null || a === b) return null;
+  return round2(((b - a + 1440) % 1440) / 60);
+}

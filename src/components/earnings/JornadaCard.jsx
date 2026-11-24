@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { Home, LogOut } from "lucide-react";
+import { Home, LogOut, PauseCircle } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO } from "../../lib/earnings.js";
 import { vehicleLabel } from "../../lib/vehicles.js";
-import { startJornada, closeJornada, openJornada, jornadaMiles } from "../../lib/jornada.js";
+import { startJornada, closeJornada, openJornada, jornadaMiles, pararTrabajo, seguirTrabajando } from "../../lib/jornada.js";
 import OdometerWheel from "./OdometerWheel.jsx";
 import VehiclePicker from "./VehiclePicker.jsx";
 
@@ -47,7 +47,7 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
       <div className="flex items-center justify-between text-[12.5px]" style={{ color: T.textSecondary }}>
         <span>
           {abierta
-            ? `Saliste a las ${abierta.horaSalida} · ${vehicleLabel(abierta.vehiculo)} · ${abierta.odoSalida}`
+            ? `Saliste a las ${abierta.horaSalida} · ${vehicleLabel(abierta.vehiculo)} · ${abierta.odoSalida}${abierta.horaParada ? ` · paraste a las ${abierta.horaParada}` : ""}`
             : millasHoy > 0
               ? `Hoy: ${millasHoy} millas`
               : "Hoy no has salido"}
@@ -68,9 +68,22 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
           </div>
         </>
       ) : (
+        <>
+        {abierta && (
+          abierta.horaParada ? (
+            <button type="button" onClick={() => onSave(jornadas.map((j) => (j.id === abierta.id ? seguirTrabajando(j) : j)))} className="w-full text-[13.5px] py-2" style={{ color: T.textSecondary, minHeight: 44 }}>
+              Volví a trabajar
+            </button>
+          ) : (
+            <button type="button" onClick={() => onSave(jornadas.map((j) => (j.id === abierta.id ? pararTrabajo(j, ahora()) : j)))} className={btn} style={{ backgroundColor: T.surfaceRaised, color: T.textPrimary, border: `1px solid ${T.border}` }}>
+              <PauseCircle size={17} /> Paré de trabajar
+            </button>
+          )
+        )}
         <button type="button" onClick={abrir} className={btn} style={{ backgroundColor: abierta ? T.red : T.surfaceRaised, color: abierta ? "#fff" : T.textPrimary, border: `1px solid ${abierta ? T.red : T.border}` }}>
           {abierta ? <Home size={17} /> : <LogOut size={17} />} {abierta ? "Llegué a casa" : "Salgo a trabajar"}
         </button>
+        </>
       )}
     </div>
   );
