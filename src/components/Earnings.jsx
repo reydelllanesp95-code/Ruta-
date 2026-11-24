@@ -483,7 +483,7 @@ export default function Earnings() {
               className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
               style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
             >
-              <ClipboardPaste size={15} /> Pegar captura de Flex
+              <ClipboardPaste size={15} /> Pegar captura
             </button>
             <button
               onClick={onExport}
