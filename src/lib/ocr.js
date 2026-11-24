@@ -13,6 +13,22 @@ const INTENTOS = [
   { umbral: null, psm: "11" },
 ];
 
+// Si un paso se cuelga (p. ej. el teléfono se queda sin memoria), se corta y
+// se dice en qué paso fue, para poder arreglarlo.
+function conTiempo(promesa, segundos, paso) {
+  return Promise.race([
+    promesa,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`se quedó en «${paso}» más de ${segundos} s`)), segundos * 1000)),
+  ]);
+}
+
+function conPaso(paso, fn) {
+  return Promise.resolve().then(fn).catch((err) => {
+    const e = new Error(`${paso}: ${err && err.message ? err.message : err}`);
+    throw e;
+  });
+}
+
 let workerPromise = null;
 function getWorker() {
   if (!workerPromise) {
@@ -22,6 +38,7 @@ function getWorker() {
         corePath: `${BASE}ocr`,
         langPath: `${BASE}ocr-lang`,
         gzip: false,
+        errorHandler: (err) => console.error("OCR", err),
       })
     );
     workerPromise.catch(() => { workerPromise = null; });
@@ -61,7 +78,7 @@ async function preparar(file, umbral) {
 // más `text` (lo leído, para que Rey lo vea y pueda corregirlo).
 export async function readCaptureImages(files, routes, onProgress = () => {}) {
   onProgress("Preparando el lector (la primera vez tarda un poco)…");
-  const worker = await getWorker();
+  const worker = await conTiempo(conPaso("cargar el lector", getWorker), 120, "cargar el lector");
   let primero = null;
   const leidos = [];
   for (const [n, intento] of INTENTOS.entries()) {
@@ -69,7 +86,8 @@ export async function readCaptureImages(files, routes, onProgress = () => {}) {
     const textos = [];
     for (const [i, f] of [...files].entries()) {
       onProgress(`Leyendo captura ${i + 1} de ${files.length}${n ? " (segundo intento)" : ""}…`);
-      const { data } = await worker.recognize(await preparar(f, intento.umbral));
+      const lienzo = await conPaso(`preparar la foto ${i + 1}`, () => preparar(f, intento.umbral));
+      const { data } = await conTiempo(conPaso(`leer la foto ${i + 1}`, () => worker.recognize(lienzo)), 90, `leer la foto ${i + 1}`);
       textos.push(data.text);
     }
     const text = textos.join("\n");
