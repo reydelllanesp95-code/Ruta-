@@ -279,6 +279,10 @@ const LYFT_TOKEN = new RegExp(
     // Lyft siempre muestra centavos; así se ignora el «$89» de la gráfica.
     "(?<dinero>\\$\\s*([\\d,]+\\.\\d{2}))",
     "(?<hora>\\b(\\d{1,2}):(\\d{2})\\s*(am|pm)\\b)",
+    // «nov 22» (pantalla Diario de Lyft y sus hojas de estadísticas)
+    // «‹ nov 21» y «nov 23 ›» son los días de al lado; la flecha lo dice.
+    "(?<fecha2>(<\\s*)?\\b(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic|jan|apr|aug|dec)[a-z]*\\.?\\s*(\\d{1,2})\\b(?!\\s*(?:de|al|:))(\\s*[>›])?)",
+    "(?<diario>ver toda la actividad diaria)",
   ].join("|"),
   "giu"
 );
@@ -295,15 +299,40 @@ export function parseLyftText(text, today = new Date(), extra = []) {
   let conectado = null;
   let reservado = null;
   let semana = null;
+  let pantallaDiario = false;
+  const isoDe = (mes, dia) => `${inferYear(mes, dia, today)}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  // Un día ya visto se continúa (la hoja de estadísticas repite la fecha).
+  const empezar = (fecha) => {
+    const ya = dias.find((x) => x.fecha === fecha);
+    if (ya) {
+      dias.splice(dias.indexOf(ya), 1);
+      dias.push(ya);
+    } else dias.push({ fecha, total: null, viajes: [], todos: [], propina: 0, horas: [] });
+  };
+  // Barra «‹ nov 21  nov 22  nov 23 ›»: fechas seguidas; la elegida es la del medio.
+  let racha = [];
+  const cerrarRacha = () => {
+    if (!racha.length) return;
+    const sin = racha.filter((x) => !x.flecha);
+    const elegida = sin.length ? sin.at(-1) : racha.length >= 3 ? racha[1] : racha.at(-1);
+    empezar(elegida.fecha);
+    racha = [];
+  };
   for (const m of normalize(text).matchAll(LYFT_TOKEN)) {
     const g = m.groups;
+    if (g.fecha2) {
+      const mes = MESES[m[26]];
+      if (mes) racha.push({ fecha: isoDe(mes, Number(m[27])), flecha: Boolean(m[25] || m[28]) });
+      continue;
+    }
+    cerrarRacha();
     const d = dias.at(-1);
-    if (g.fecha) {
+    if (g.diario) {
+      pantallaDiario = true;
+    } else if (g.fecha) {
       const mes = MESES[m[3]];
       if (!mes) continue;
-      const dia = Number(m[2]);
-      const fecha = `${inferYear(mes, dia, today)}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-      dias.push({ fecha, total: null, viajes: [], todos: [], propina: 0, horas: [] });
+      empezar(isoDe(mes, Number(m[2])));
     } else if (g.extra) {
       if (d && m[5].toLowerCase() === "propina") d.propina = round2(d.propina + money(m[6]));
     } else if (g.semana) {
@@ -327,14 +356,18 @@ export function parseLyftText(text, today = new Date(), extra = []) {
         const v = money(m[19]);
         // Todos los importes (menos el total repetido): sirven para comprobar
         // que el total no se leyó de menos.
-        if (v !== d.total) d.todos.push(v);
-        if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(v);
+        // El total repetido (detrás de una hoja de estadísticas) no es un viaje.
+        if (v !== d.total) {
+          d.todos.push(v);
+          if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(v);
+        }
       }
     } else if (g.hora && d) {
       d.horas.push(to24(m[21], m[22], m[23]));
     }
   }
-  if (!dias.length) return { ok: false, error: "No encontré el día de Lyft («dom 22 de nov»)." };
+  cerrarRacha();
+  if (!dias.length) return { ok: false, error: "No encontré el día de Lyft («dom 22 de nov» o «nov 22»)." };
   if (reservado == null) {
     for (const t of extra) {
       const m = normalize(t).match(/tiempo reservado(?:(?!tiempo (?:conectado|reservado)|kil)[^\d]){0,80}?(\d+)\s*h(?:\s*(\d+)\s*min)?/);
@@ -352,7 +385,11 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       avisos.push(`Lyft ${fechaCortaISO(d.fecha)}: los viajes suman $${suma} y el día dice $${d.total ?? "?"}; no lo puse.`);
       continue;
     }
-    if (suma < d.total) {
+    const propinaDesconocida = pantallaDiario && d.propina === 0;
+    if (propinaDesconocida) {
+      avisos.push(`Lyft ${fechaCortaISO(d.fecha)}: esta pantalla no muestra las propinas; sube la «Actividad diaria» de ese día para ponerlas.`);
+    }
+    if (suma < d.total && !pantallaDiario) {
       // Se perdió algún viaje al leer (letra verde, iconos), pero el total del
       // día, grande y claro, sí: vale el total; se avisa para comprobarlo.
       avisos.push(`Lyft ${fechaCortaISO(d.fecha)}: usé el total del día ($${d.total}); no pude comprobar viaje por viaje. Compáralo con Lyft.`);
@@ -368,6 +405,7 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       horasTrabajo: dias.length === 1 ? reservado ?? conectado : null,
       horasFuente: dias.length !== 1 ? null : reservado != null ? "tiempo reservado" : conectado != null ? "tiempo conectado" : null,
       ...(dias.length === 1 && (reservado ?? conectado) && semana ? { semana } : {}),
+      ...(propinaDesconocida ? { propinaDesconocida: true } : {}),
     });
   }
   if (!out.length) return { ok: false, error: avisos[0], avisos };
@@ -385,17 +423,28 @@ export function planLyftImport(dias, routes) {
   const lyft = (routes || []).filter((r) => isShift(r) && r.plataforma === "lyft");
   const cambios = [];
   let sinCambios = 0;
-  for (const d of dias) {
-    const pago = round2(d.total - d.propina);
+  for (let d of dias) {
+    let pago = round2(d.total - d.propina);
     // El tiempo conectado de las estadísticas es de la SEMANA: solo vale como
     // horas del día si no hay otros días de Lyft en esa semana.
     const otrosEnSemana = d.semana && lyft.some((x) => x.fecha !== d.fecha && x.fecha >= d.semana.desde && x.fecha <= d.semana.hasta);
-    const horas = lyftHoras(otrosEnSemana ? { ...d, horasTrabajo: null } : d);
+    let horas = lyftHoras(otrosEnSemana ? { ...d, horasTrabajo: null } : d);
+    let horasFuente = otrosEnSemana ? "primer a último viaje" : d.horasFuente || "primer a último viaje";
     const nota = `Lyft: ${d.viajes} viaje(s) (desde captura)`;
     const horario = d.horaInicio ? `${d.horaInicio}–${d.horaFin}` : "";
     const r = lyft.find((x) => x.fecha === d.fecha);
+    // No se empeora lo que ya hay: sin tiempo reservado/conectado se quedan las
+    // horas guardadas, y si esta pantalla no trae propinas se quedan las guardadas.
+    if (r && !d.horasFuente && Number(r.horas) > 0) {
+      horas = Number(r.horas);
+      horasFuente = "las que ya tenía";
+    }
+    if (r && d.propinaDesconocida) {
+      d = { ...d, propina: round2(r.propina || 0) };
+      pago = round2(d.total - d.propina);
+    }
     if (!r) {
-      cambios.push({ tipo: "nuevo", plataforma: "lyft", fecha: d.fecha, horario, horaInicio: d.horaInicio, horaFin: d.horaFin, horas, horasFuente: otrosEnSemana ? "primer a último viaje" : d.horasFuente || "primer a último viaje", pago, propina: d.propina, nota });
+      cambios.push({ tipo: "nuevo", plataforma: "lyft", fecha: d.fecha, horario, horaInicio: d.horaInicio, horaFin: d.horaFin, horas, horasFuente, pago, propina: d.propina, nota });
       continue;
     }
     const antes = { pago: round2(r.pagoBase || 0), propina: round2(r.propina || 0) };
@@ -403,7 +452,7 @@ export function planLyftImport(dias, routes) {
       sinCambios += 1;
       continue;
     }
-    cambios.push({ tipo: "actualizar", plataforma: "lyft", routeId: r.id, fecha: d.fecha, horas, horasFuente: otrosEnSemana ? "primer a último viaje" : d.horasFuente || "primer a último viaje", horaInicio: d.horaInicio, horaFin: d.horaFin,
+    cambios.push({ tipo: "actualizar", plataforma: "lyft", routeId: r.id, fecha: d.fecha, horas, horasFuente, horaInicio: d.horaInicio, horaFin: d.horaFin,
       bloques: [{ idx: 0, horario: horario || "día", antes, despues: { pago, propina: d.propina } }] });
   }
   cambios.sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -430,16 +479,22 @@ export function applyLyftPlan(routes, plan, { vehiculo } = {}) {
   return next;
 }
 
+// Avisos que solo informan (propinas que llegan después) frente a los que
+// dicen que algo se dejó fuera o no se pudo comprobar.
+function graves(avisos = []) {
+  return avisos.filter((a) => !/propina pendiente|no muestra las propinas/.test(a)).length;
+}
+
 // Un solo punto de entrada para la pantalla: decide Flex o Lyft.
 export function readCapture(text, routes, today = new Date(), extra = []) {
   if (isLyftText(text)) {
     const r = parseLyftText(text, today, extra);
     if (!r.ok) return r;
-    return { ok: true, plataforma: "lyft", plan: planLyftImport(r.dias, routes), avisos: r.avisos, leidos: r.dias.length };
+    return { ok: true, plataforma: "lyft", plan: planLyftImport(r.dias, routes), avisos: r.avisos, graves: graves(r.avisos), leidos: r.dias.length };
   }
   const r = parseFlexText(text, today);
   if (!r.ok) return r;
-  return { ok: true, plataforma: "flex", plan: planFlexImport(r.items, routes), avisos: r.avisos, leidos: r.items.length };
+  return { ok: true, plataforma: "flex", plan: planFlexImport(r.items, routes), avisos: r.avisos, graves: graves(r.avisos), leidos: r.items.length };
 }
 
 export function applyCapture(plataforma, routes, plan, opts) {

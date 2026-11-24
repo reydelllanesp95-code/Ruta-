@@ -213,3 +213,63 @@ describe('Flex: bloque sin propina', () => {
     expect(parseFlexText('sáb, mar 1\n12:00 p.m. - 3:30 p.m.\n$75.50\nBase: $70', HOY).ok).toBe(false);
   });
 });
+
+describe('Lyft: pantalla Diario', () => {
+  const DIARIO = `Diario Semana Mes Año
+< mar 7  mar 8  mar 9 >
+$40.50
+$15.25 Lyft
+incluye Bono de $1.00
+6:10 p.m.
+$2.00 Pasajero cancelado
+1:40 p.m.
+Ver toda la actividad diaria →
+Tus estadísticas diarias
+ESTADÍSTICAS DE GANANCIAS
+19,60 US$
+por hora reservada
+Saldo de $0.00
+Estado del pago`;
+  const HOJA = `Estadísticas de manejo
+mar 8
+Viajes completados 3
+Tiempo reservado
+Tiempo empleado en manejar para recoger y dejar pasajeros
+2 h 10 min
+Tiempo conectado
+5 h 30 min`;
+  it('toma el día del medio, el total grande y las horas reservadas; avisa de las propinas', () => {
+    const r = parseLyftText(DIARIO + '\n' + HOJA, HOY);
+    expect(r.ok).toBe(true);
+    expect(r.dias).toHaveLength(1);
+    expect(r.dias[0]).toMatchObject({ fecha: '2025-03-08', total: 40.5, propina: 0, horasTrabajo: 2.17 });
+    expect(r.avisos.join(' ')).toMatch(/no muestra las propinas/);
+  });
+  it('después, la Actividad diaria actualiza el mismo registro con las propinas', () => {
+    const uno = applyCapture('lyft', [], readCapture(DIARIO + '\n' + HOJA, [], HOY).plan, { vehiculo: 'kia' });
+    const dos = readCapture(LYFT, uno, HOY);
+    expect(dos.plan.cambios[0].tipo).toBe('actualizar');
+    const fin = applyCapture('lyft', uno, dos.plan, { vehiculo: 'kia' });
+    expect(fin).toHaveLength(1);
+    expect(fin[0]).toMatchObject({ ganancia: 40.5, propina: 7.5 });
+  });
+});
+
+describe('Lyft: no empeorar lo guardado', () => {
+  it('la pantalla Diario no borra propinas ya puestas; la Actividad sin estadísticas no cambia las horas', () => {
+    const DIARIO = '< mar 7  mar 8  mar 9 >\n$40.50\n$15.25 Lyft\n6:10 p.m.\nVer toda la actividad diaria\nSaldo de $0.00';
+    const conActividad = applyCapture('lyft', [], readCapture(LYFT + '\n' + STATS, [], HOY).plan, { vehiculo: 'kia' });
+    expect(readCapture(DIARIO, conActividad, HOY).plan.cambios).toEqual([]);
+    const otra = readCapture(LYFT, conActividad, HOY);
+    expect(otra.plan.cambios).toEqual([]);
+  });
+});
+
+describe('Lyft: barra de días con flechas', () => {
+  it('ignora los días con flecha («< mar 7», «mar9 >») aunque salgan detrás de una hoja', () => {
+    const t = 'Estadísticas de ganancias\nmar 8\n< mar 7\nmar9 >\n$40.50\nmar 8\nTiempo reservado\n2 h 10 min\nVer toda la actividad diaria';
+    const r = parseLyftText(t, HOY);
+    expect(r.dias.map((d) => d.fecha)).toEqual(['2025-03-08']);
+    expect(r.dias[0]).toMatchObject({ total: 40.5, horasTrabajo: 2.17 });
+  });
+});

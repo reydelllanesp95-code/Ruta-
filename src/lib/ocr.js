@@ -102,10 +102,11 @@ export async function readCaptureImages(files, routes, onProgress = () => {}) {
       for (const f of files) otros.push((await worker.recognize(await preparar(f, INTENTOS[n + 1].umbral, INTENTOS[n + 1].escala))).data.text);
       r = readCapture(text, routes, undefined, [otros.join("\n")]);
     }
-    // Sin avisos: listo. Con avisos se prueba la otra forma de preparar la
-    // foto y se queda la lectura que más saca (a igualdad, la de menos avisos).
-    if (r.ok && !r.avisos?.length) return { ...r, text };
-    const mejorQue = (a, b) => !b || (a.ok && (!b.ok || a.leidos > b.leidos || (a.leidos === b.leidos && a.avisos.length < b.avisos.length)));
+    // Sin avisos graves (solo «propina pendiente» y similares): listo.
+    if (r.ok && !r.graves) return { ...r, text };
+    // Si no, gana la lectura con menos avisos graves y, a igualdad, la que más
+    // saca (más lecturas no es mejor si vienen con avisos: suelen ser basura).
+    const mejorQue = (a, b) => !b || (a.ok && (!b.ok || a.graves < b.graves || (a.graves === b.graves && a.leidos > b.leidos)));
     if (mejorQue(r, primero)) primero = { ...r, text };
   }
   if (primero.ok) return primero;
