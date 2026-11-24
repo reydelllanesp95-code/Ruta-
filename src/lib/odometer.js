@@ -2,9 +2,10 @@
 
 import { vehicleOf } from "./vehicles.js";
 
-// Mayor odómetro conocido de un vehículo entre turnos, llenados y mantenimiento.
+// Mayor odómetro conocido de un vehículo entre turnos, llenados, mantenimiento
+// y jornadas.
 // Sin datos → null.
-export function lastOdometer(vehiculo, { routes = [], fuelups = [], maints = [] } = {}) {
+export function lastOdometer(vehiculo, { routes = [], fuelups = [], maints = [], jornadas = [] } = {}) {
   let max = null;
   const consider = (v) => {
     const n = Number(v);
@@ -17,6 +18,11 @@ export function lastOdometer(vehiculo, { routes = [], fuelups = [], maints = [] 
   }
   for (const f of fuelups) if (vehicleOf(f) === vehiculo) consider(f.odometro);
   for (const m of maints) if (vehicleOf(m) === vehiculo) consider(m.odometro);
+  for (const j of jornadas) {
+    if (vehicleOf(j) !== vehiculo) continue;
+    consider(j.odoSalida);
+    consider(j.odoLlegada);
+  }
   return max;
 }
 

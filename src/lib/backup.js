@@ -1,6 +1,6 @@
 // Respaldo: exportar/importar toda la app como JSON. [Aud 13][Aud 14]
 
-import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, SCHEMA_VERSION } from "./constants.js";
+import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { SHIFT_CSV_HEADER } from "./platforms.js";
@@ -18,11 +18,12 @@ export async function buildBackup() {
   const comidas = (await loadJSON(KEY_MEALS, [])) || [];
   const peajes = (await loadJSON(KEY_TOLLS, [])) || [];
   const locales = (await loadJSON(KEY_LOCALES, [])) || [];
+  const jornadas = (await loadJSON(KEY_JORNADAS, [])) || [];
   return {
     type: BACKUP_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportadoEn: new Date().toISOString(),
-    data: { codigos, rutas, config, fuelups, mantenimiento, comidas, peajes, locales },
+    data: { codigos, rutas, config, fuelups, mantenimiento, comidas, peajes, locales, jornadas },
   };
 }
 
@@ -72,6 +73,9 @@ export async function restoreBackup(jsonText) {
   // locales opcional: backups viejos (sin locales) → [].
   const locales = Array.isArray(parsed.data.locales) ? parsed.data.locales : [];
   await saveJSON(KEY_LOCALES, locales);
+  // jornadas opcional: backups viejos (sin jornadas) → [].
+  const jornadas = Array.isArray(parsed.data.jornadas) ? parsed.data.jornadas : [];
+  await saveJSON(KEY_JORNADAS, jornadas);
   return {
     codigos: codigos.length,
     rutas: rutas.length,
@@ -81,6 +85,7 @@ export async function restoreBackup(jsonText) {
     comidas: comidas.length,
     peajes: peajes.length,
     locales: locales.length,
+    jornadas: jornadas.length,
   };
 }
 

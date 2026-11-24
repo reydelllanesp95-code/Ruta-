@@ -14,7 +14,7 @@ import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
 import { lastOdometer } from "../lib/odometer.js";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, DEFAULT_CONFIG } from "../lib/constants.js";
 import CleaningPanel from "./earnings/CleaningPanel.jsx";
 import { sanitizeLocal } from "../lib/cleaning.js";
 import * as storage from "../lib/storage.js";
@@ -49,6 +49,8 @@ import ImportDialog from "./earnings/ImportDialog.jsx";
 import ShiftForm from "./earnings/ShiftForm.jsx";
 import ShiftCard from "./earnings/ShiftCard.jsx";
 import PasteCapture from "./earnings/PasteCapture.jsx";
+import JornadaCard from "./earnings/JornadaCard.jsx";
+import { withJornadaMiles } from "../lib/jornada.js";
 import PlatformSummary from "./earnings/PlatformSummary.jsx";
 import {
   makeShift,
@@ -68,6 +70,7 @@ export default function Earnings() {
   const [meals, setMeals] = useState([]);
   const [tolls, setTolls] = useState([]);
   const [locales, setLocales] = useState([]);
+  const [jornadas, setJornadas] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -84,7 +87,7 @@ export default function Earnings() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt, ml, tl, lc] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc, jo] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
@@ -92,8 +95,10 @@ export default function Earnings() {
         storage.loadJSON(KEY_MEALS, []),
         storage.loadJSON(KEY_TOLLS, []),
         storage.loadJSON(KEY_LOCALES, []),
+        storage.loadJSON(KEY_JORNADAS, []),
       ]);
       if (mounted) {
+        setJornadas(Array.isArray(jo) ? jo : []);
         setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
         setTolls(Array.isArray(tl) ? tl : []);
         setRoutes(Array.isArray(data) ? data : []);
@@ -132,6 +137,13 @@ export default function Earnings() {
     } catch (err) {
       setMsg({ tipo: "error", texto: "No se pudieron guardar los ajustes: " + (err.message || err) });
     }
+  }
+
+  function persistJornadas(next) {
+    setJornadas(next);
+    storage.saveJSON(KEY_JORNADAS, next).catch((err) =>
+      setMsg({ tipo: "error", texto: "No se pudo guardar la jornada: " + (err.message || err) })
+    );
   }
 
   function persistFuelups(next) {
@@ -191,11 +203,15 @@ export default function Earnings() {
     [vCfgs]
   );
 
+  // Rutas tal como se muestran: con las millas de las jornadas repartidas
+  // entre los trabajos de cada día (cálculo; lo guardado no cambia).
+  const routesVista = useMemo(() => withJornadaMiles(routes, jornadas), [routes, jornadas]);
+
   // Agregaciones memoizadas: recalculan al cambiar rutas o los costos. [Aud 16]
   const agg = useMemo(
     // Solo reparto: las limpiezas van en su propio panel.
-    () => aggregate(deliveryOnly(routes), config, platformOf, configFor),
-    [routes, config, configFor]
+    () => aggregate(deliveryOnly(routesVista), config, platformOf, configFor),
+    [routesVista, config, configFor]
   );
 
   // Muestra el período ACTUAL; si está vacío, cae al más reciente con datos
@@ -226,8 +242,8 @@ export default function Earnings() {
   }, [routes]);
 
   const routesOrdenadas = useMemo(
-    () => [...routes].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
-    [routes]
+    () => [...routesVista].sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0)),
+    [routesVista]
   );
 
   async function onFile(e) {
@@ -340,7 +356,7 @@ export default function Earnings() {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt, ml, tl, lc] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc, jo] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
@@ -348,6 +364,7 @@ export default function Earnings() {
         storage.loadJSON(KEY_MEALS, []),
         storage.loadJSON(KEY_TOLLS, []),
         storage.loadJSON(KEY_LOCALES, []),
+        storage.loadJSON(KEY_JORNADAS, []),
       ]);
       setTolls(Array.isArray(tl) ? tl : []);
       setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
@@ -356,6 +373,7 @@ export default function Earnings() {
       setFuelups(Array.isArray(fu) ? fu : []);
       setMaints(Array.isArray(mt) ? mt : []);
       setMeals(Array.isArray(ml) ? ml : []);
+      setJornadas(Array.isArray(jo) ? jo : []);
       setMsg({ tipo: "ok", texto: `Respaldo restaurado: ${res.rutas} rutas, ${res.codigos} códigos.` });
     } catch (err) {
       setMsg({ tipo: "error", texto: err.message || String(err) });
@@ -436,6 +454,13 @@ export default function Earnings() {
           mesLabel={mesInfo.label}
         />
 
+        <JornadaCard
+          jornadas={jornadas}
+          lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
+          defaultVehicle={lastVehicle}
+          onSave={persistJornadas}
+        />
+
         {addingShift ? (
           <div className="rounded-xl p-3" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
             <div className="gc-eyebrow text-[11px] uppercase mb-2" style={{ color: T.textFaint }}>
@@ -445,7 +470,7 @@ export default function Earnings() {
               persistDraft
               locales={locales}
               lastOdoByVehicle={Object.fromEntries(
-                VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints })])
+                VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints, jornadas })])
               )}
               defaultVehicle={lastVehicle}
               onSubmit={addShift}

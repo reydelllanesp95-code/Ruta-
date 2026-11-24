@@ -19,9 +19,7 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
   const fuelups = forVehicle(allFuelups, vehiculo);
   const effInfo = effByVehicle[vehiculo];
   const [fecha, setFecha] = useState(todayISO());
-  const [galones, setGalones] = useState("");
   const [costo, setCosto] = useState("");
-  const [odometro, setOdometro] = useState("");
   const [error, setError] = useState("");
 
   const avgDias = avgDaysBetweenFillups(fuelups);
@@ -29,10 +27,9 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
 
   function add() {
     setError("");
-    const chk = validateFuelup({ galones, odometro, fecha }, fuelups);
+    const chk = validateFuelup({ costo, fecha }, fuelups);
     if (!chk.ok) return setError(chk.error);
-    onAdd({ fecha, galones, costo, odometro, vehiculo });
-    setGalones("");
+    onAdd({ fecha, costo, vehiculo });
     setCosto("");
     setOdometro("");
   }
@@ -40,7 +37,7 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
   const tramos = fillInfoById(fuelups);
   const listado = (fuelups || [])
     .slice()
-    .sort((a, b) => Number(b.odometro) - Number(a.odometro));
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.creadoEn || "").localeCompare(String(a.creadoEn || "")));
 
   const Chevron = open ? ChevronDown : ChevronRight;
 
@@ -74,15 +71,13 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
           />
           {effInfo.source !== "real" && (
             <div className="text-[12px]" style={{ color: T.textFaint }}>
-              Agrega al menos 2 llenados con odómetro para calcular tu MPG real.
+              Se usa el MPG asumido de este carro (lo cambias en el panel «Gas $… · MPG»).
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <Field label="Fecha" value={fecha} onChange={setFecha} type="date" />
-            <Field label="Odómetro (millas)" value={odometro} onChange={setOdometro} />
-            <Field label="Galones" value={galones} onChange={setGalones} />
-            <Field label="Costo $ (opcional)" value={costo} onChange={setCosto} />
+            <Field label="Pagaste $" value={costo} onChange={setCosto} />
           </div>
 
           {error && (
@@ -151,13 +146,16 @@ export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekSt
                 >
                   <div className="min-w-0">
                     <div className="text-[13px]" style={{ color: T.textPrimary }}>
-                      {f.fecha} · {f.galones} gal
+                      {f.fecha}
                       {f.costo != null ? ` · ${formatMoney(f.costo)}` : ""}
+                      {f.galones ? ` · ${f.galones} gal` : ""}
                     </div>
-                    <div className="gc-code text-[11.5px]" style={{ color: T.textFaint }}>
-                      odómetro {Number(f.odometro).toLocaleString()}
-                      {tramos[f.id] && ` · +${tramos[f.id].millas.toLocaleString()} mi`}
-                    </div>
+                    {f.odometro > 0 && (
+                      <div className="gc-code text-[11.5px]" style={{ color: T.textFaint }}>
+                        odómetro {Number(f.odometro).toLocaleString()}
+                        {tramos[f.id] && ` · +${tramos[f.id].millas.toLocaleString()} mi`}
+                      </div>
+                    )}
                     {tramos[f.id] && tramos[f.id].gap && (
                       <div className="text-[11.5px]" style={{ color: T.revisar }}>
                         Hueco de {tramos[f.id].millas.toLocaleString()} millas: faltan llenados por apuntar. No cuenta para el MPG.
