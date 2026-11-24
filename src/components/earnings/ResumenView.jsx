@@ -7,6 +7,7 @@ import { platformOf, platformLabel, isCleaning } from "../../lib/platforms.js";
 import { Card, Eyebrow, NetoHero, Deducciones, Segmented, AppBadge, APP_COLOR } from "./ui.jsx";
 import JornadaHoras from "./JornadaHoras.jsx";
 import SemanaPasada from "./SemanaPasada.jsx";
+import RendimientoCard from "./RendimientoCard.jsx";
 import { MetaSemanaCard, MetaMesCard, FondoCard, DeudaCard } from "./MetaV2.jsx";
 import { netaMeta, estadoSemana, historialMeta, compensacion, mesMeta, historialMeses } from "../../lib/meta.js";
 
@@ -163,6 +164,8 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
           </div>
         </div>
       </Card>
+
+      {!esDia && <RendimientoCard datos={datos} hasta={p.hasta < hoy ? p.hasta : hoy} />}
 
       {r.porApp.length > 0 && (
         <Card>
