@@ -1,0 +1,72 @@
+import { describe, it, expect } from 'vitest';
+import { periodo, moverPeriodo, resumenRango, resumenPeriodo, resumenDia, propinasPendientes, filasAño } from '../resumen.js';
+import { makeShift } from '../platforms.js';
+
+// Datos sintéticos, ajenos al historial del usuario.
+const cfg = { gas_price: 4, mpg: 20, maintenance_cost_per_mile: 0.1 };
+const t = (fecha, plataforma, pago, propina, millas, horaInicio = '08:00', horaFin = '10:00') =>
+  makeShift({ plataforma, vehiculo: 'kia', fecha, horaInicio, horaFin, pago: String(pago), propina: String(propina), millas: String(millas) });
+const routes = [
+  t('2025-03-08', 'flex', 40, 10, 50), // sáb: semana 8–14
+  t('2025-03-09', 'lyft', 30, 5, 20, '12:00', '13:00'),
+  t('2025-03-03', 'flex', 40, 0, 40), // semana anterior 1–7
+  makeShift({ plataforma: 'limpieza', vehiculo: 'kia', fecha: '2025-03-08', millas: '30', local: 'X' }),
+];
+const datos = {
+  routes,
+  meals: [{ fecha: '2025-03-08', costo: 7.5 }],
+  tolls: [{ fecha: '2025-03-09', monto: 2.25 }],
+  fuelups: [{ fecha: '2025-03-09', costo: 30 }],
+  maints: [{ fecha: '2025-02-01', costo: 60 }],
+  configFor: () => cfg,
+};
+
+describe('periodos', () => {
+  it('semana de pago sáb–vie, mes y año; moverse', () => {
+    const s = periodo('semana', '2025-03-10', 6);
+    expect(s).toMatchObject({ desde: '2025-03-08', hasta: '2025-03-14' });
+    expect(moverPeriodo(s, -1, 6)).toMatchObject({ desde: '2025-03-01', hasta: '2025-03-07' });
+    expect(periodo('mes', '2025-02-10')).toMatchObject({ desde: '2025-02-01', hasta: '2025-02-28' });
+    expect(moverPeriodo(periodo('mes', '2025-01-10'), -1)).toMatchObject({ desde: '2024-12-01', hasta: '2024-12-31' });
+    expect(periodo('año', '2025-06-01')).toMatchObject({ desde: '2025-01-01', hasta: '2025-12-31' });
+  });
+});
+
+describe('resumenRango', () => {
+  it('Ganado − (gas + mant + comida + peajes) = Neto, sin limpiezas', () => {
+    const r = resumenRango(datos, '2025-03-08', '2025-03-14');
+    expect(r.ganado).toBe(85);
+    expect(r.millas).toBe(70);
+    // gas: 70/20*4 = 14; mant: 7; comida 7.5; peajes 2.25
+    expect(r.deducciones).toEqual({ gasolina: 14, mantenimiento: 7, comida: 7.5, peajes: 2.25, total: 30.75 });
+    expect(r.neto).toBe(54.25);
+    expect(r.horas).toBe(3);
+    expect(r.netoHora).toBe(18.08);
+    expect(r.gasolinaPagada).toBe(30);
+    expect(r.porApp.map((a) => [a.plataforma, a.ganado])).toEqual([['flex', 50], ['lyft', 35]]);
+  });
+  it('compara con el periodo anterior y da la serie', () => {
+    const p = periodo('semana', '2025-03-10', 6);
+    const r = resumenPeriodo(datos, p, 6, 3);
+    expect(r.anterior.ganado).toBe(40);
+    expect(r.serie.map((s) => s.neto)).toEqual([0, 28, 54.25]); // 40 − 40/20*4 − 40*0.1
+  });
+  it('día: registros en orden, incluida la limpieza', () => {
+    const d = resumenDia(datos, '2025-03-08');
+    expect(d.ganado).toBe(50);
+    expect(d.registros).toHaveLength(2);
+  });
+});
+
+describe('propinas pendientes y año', () => {
+  it('Flex de los últimos 3 días con propina 0, sin hoy', () => {
+    const rs = [t('2025-03-07', 'flex', 40, 0, 0), t('2025-03-08', 'flex', 40, 5, 0), t('2025-03-10', 'flex', 40, 0, 0), t('2025-03-03', 'flex', 40, 0, 0)];
+    expect(propinasPendientes(rs, '2025-03-10').map((r) => r.fecha)).toEqual(['2025-03-07']);
+  });
+  it('filas del año para el contador', () => {
+    const { filas, resumen } = filasAño(datos, 2025);
+    expect(resumen.ganado).toBe(125);
+    expect(filas).toContainEqual(['mantenimiento pagado', '60.00']);
+    expect(filas).toContainEqual(['millas de trabajo', '110.0']);
+  });
+});
