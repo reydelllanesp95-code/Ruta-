@@ -273,3 +273,28 @@ describe('Lyft: barra de días con flechas', () => {
     expect(r.dias[0]).toMatchObject({ total: 40.5, horasTrabajo: 2.17 });
   });
 });
+
+describe('millas de Lyft en la captura (criterios 5–6)', () => {
+  it('lee «86,79 mi» de la pantalla diaria y lo pasa al registro', async () => {
+    const { parseLyftText, planLyftImport, applyLyftPlan } = await import('../captura.js');
+    const texto = ['Diario', 'dom 22 de nov', '$89.27', 'Tiempo reservado', 'Tiempo empleado en manejar para', '4 h 6 min', 'recoger y dejar pasajeros',
+      'Kilómetros reservados', 'Kilómetros manejados durante el', '86,79 mi', 'tiempo reservado', 'Tiempo conectado', '6h10 min'].join('\n');
+    const r = parseLyftText(texto, new Date(2026, 10, 24));
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(r.dias[0].millasApp).toBe(86.79);
+    const plan = planLyftImport(r.dias, []);
+    expect(plan.cambios[0].millasLyft).toBe(86.79);
+    expect(applyLyftPlan([], plan, { vehiculo: 'kia' })[0].millasLyft).toBe(86.79);
+  });
+  it('semana con otro día de Lyft: las millas no se asignan a un día', async () => {
+    const { planLyftImport } = await import('../captura.js');
+    const otro = { ...makeShift({ plataforma: 'lyft', vehiculo: 'kia', fecha: '2026-11-18', pago: '50', propina: '0' }) };
+    const d = { fecha: '2026-11-22', total: 89.27, propina: 8.9, viajes: 8, horaInicio: '', horaFin: '', horasTrabajo: 4.1, horasFuente: 'tiempo reservado', millasApp: 86.79, semana: { desde: '2026-11-16', hasta: '2026-11-22' } };
+    expect(planLyftImport([d], [otro]).cambios[0].millasLyft).toBe(null);
+  });
+});
+describe('millas en la captura con estadísticas de semana', () => {
+  it('«Kilómetros reservados 30,5 mi» con un solo día → 30.5', () => {
+    expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].millasApp).toBe(30.5);
+  });
+});

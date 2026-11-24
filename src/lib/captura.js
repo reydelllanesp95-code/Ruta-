@@ -368,6 +368,13 @@ export function parseLyftText(text, today = new Date(), extra = []) {
   }
   cerrarRacha();
   if (!dias.length) return { ok: false, error: "No encontré el día de Lyft («dom 22 de nov» o «nov 22»)." };
+  // «Kilómetros reservados / manejados durante el tiempo reservado: 86,79 mi»:
+  // Lyft lo da en millas e incluye el camino a recoger al pasajero.
+  let millasR = null;
+  for (const t of [text, ...extra]) {
+    const mm = normalize(t).match(/kil[oó]metros (?:reservados|manejados)[\s\S]{0,120}?(\d{1,4}(?:[.,]\d{1,2})?)\s*mi\b/);
+    if (mm) { millasR = round2(Number(mm[1].replace(",", "."))); break; }
+  }
   if (reservado == null) {
     for (const t of extra) {
       const m = normalize(t).match(/tiempo reservado(?:(?!tiempo (?:conectado|reservado)|kil)[^\d]){0,80}?(\d+)\s*h(?:\s*(\d+)\s*min)?/);
@@ -404,6 +411,7 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       horaFin: orden.at(-1) || "",
       horasTrabajo: dias.length === 1 ? reservado ?? conectado : null,
       horasFuente: dias.length !== 1 ? null : reservado != null ? "tiempo reservado" : conectado != null ? "tiempo conectado" : null,
+      ...(dias.length === 1 && millasR > 0 ? { millasApp: millasR } : {}),
       ...(dias.length === 1 && (reservado ?? conectado) && semana ? { semana } : {}),
       ...(propinaDesconocida ? { propinaDesconocida: true } : {}),
     });
@@ -430,6 +438,8 @@ export function planLyftImport(dias, routes) {
     const otrosEnSemana = d.semana && lyft.some((x) => x.fecha !== d.fecha && x.fecha >= d.semana.desde && x.fecha <= d.semana.hasta);
     let horas = lyftHoras(otrosEnSemana ? { ...d, horasTrabajo: null } : d);
     let horasFuente = otrosEnSemana ? "primer a último viaje" : d.horasFuente || "primer a último viaje";
+    // Las millas de las estadísticas también son de la semana: misma regla.
+    const millasLyft = !otrosEnSemana && d.millasApp > 0 ? d.millasApp : null;
     const nota = `Lyft: ${d.viajes} viaje(s) (desde captura)`;
     const horario = d.horaInicio ? `${d.horaInicio}–${d.horaFin}` : "";
     const r = lyft.find((x) => x.fecha === d.fecha);
@@ -444,15 +454,15 @@ export function planLyftImport(dias, routes) {
       pago = round2(d.total - d.propina);
     }
     if (!r) {
-      cambios.push({ tipo: "nuevo", plataforma: "lyft", fecha: d.fecha, horario, horaInicio: d.horaInicio, horaFin: d.horaFin, horas, horasFuente, pago, propina: d.propina, nota });
+      cambios.push({ tipo: "nuevo", plataforma: "lyft", fecha: d.fecha, horario, horaInicio: d.horaInicio, horaFin: d.horaFin, horas, horasFuente, millasLyft, pago, propina: d.propina, nota });
       continue;
     }
     const antes = { pago: round2(r.pagoBase || 0), propina: round2(r.propina || 0) };
-    if (antes.pago === pago && antes.propina === d.propina && (horas == null || r.horas === horas)) {
+    if (antes.pago === pago && antes.propina === d.propina && (horas == null || r.horas === horas) && (millasLyft == null || r.millasLyft === millasLyft)) {
       sinCambios += 1;
       continue;
     }
-    cambios.push({ tipo: "actualizar", plataforma: "lyft", routeId: r.id, fecha: d.fecha, horas, horasFuente, horaInicio: d.horaInicio, horaFin: d.horaFin,
+    cambios.push({ tipo: "actualizar", plataforma: "lyft", routeId: r.id, fecha: d.fecha, horas, horasFuente, millasLyft, horaInicio: d.horaInicio, horaFin: d.horaFin,
       bloques: [{ idx: 0, horario: horario || "día", antes, despues: { pago, propina: d.propina } }] });
   }
   cambios.sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -468,12 +478,14 @@ export function applyLyftPlan(routes, plan, { vehiculo } = {}) {
     const out = { ...r, pagoBase: pago, propina, ganancia: round2(pago + propina) };
     if (c.horaInicio && !r.bloques?.length) Object.assign(out, { horaInicio: c.horaInicio, horaFin: c.horaFin });
     if (c.horas != null) out.horas = c.horas;
+    if (c.millasLyft != null) out.millasLyft = c.millasLyft;
     return out;
   });
   for (const c of plan.cambios) {
     if (c.tipo !== "nuevo") continue;
     const s = makeShift({ plataforma: "lyft", fecha: c.fecha, vehiculo, horaInicio: c.horaInicio, horaFin: c.horaFin, pago: c.pago, propina: c.propina, nota: c.nota });
     if (c.horas != null) s.horas = c.horas;
+    if (c.millasLyft != null) s.millasLyft = c.millasLyft;
     next.push(s);
   }
   return next;

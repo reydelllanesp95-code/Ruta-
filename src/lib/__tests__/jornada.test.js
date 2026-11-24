@@ -116,3 +116,23 @@ describe('pausas (criterios 1–3 de docs/criterios-pausas-gastos-hoy.md)', () =
     expect(horasJornada({ horaSalida: '06:00', horaLlegada: '18:00' })).toBe(12);
   });
 });
+
+describe('millas de Lyft (criterio 5 de docs/criterios-por-hora-millas-lyft.md)', () => {
+  const jor = (odoS, odoL) => [{ id: 'j', fecha: '2026-11-22', vehiculo: 'kia', horaSalida: '08:00', odoSalida: odoS, horaLlegada: '18:00', odoLlegada: odoL }];
+  const flex = makeShift({ plataforma: 'flex', vehiculo: 'kia', fecha: '2026-11-22', horaInicio: '08:00', horaFin: '11:00', pago: '60', propina: '0', millas: '' });
+  const lyft = { ...makeShift({ plataforma: 'lyft', vehiculo: 'kia', fecha: '2026-11-22', horaInicio: '12:00', horaFin: '17:00', pago: '80', propina: '9', millas: '' }), millasLyft: 86.79 };
+  it('Lyft se queda sus millas y Flex el resto', () => {
+    const r = withJornadaMiles([flex, lyft], jor(1000, 1120));
+    expect(r.find((x) => x.plataforma === 'lyft').millas).toBe(86.79);
+    expect(r.find((x) => x.plataforma === 'flex').millas).toBe(33.21);
+  });
+  it('si Lyft pasa del odómetro, Lyft todo y Flex 0', () => {
+    const r = withJornadaMiles([flex, lyft], jor(1000, 1050));
+    expect(r.find((x) => x.plataforma === 'lyft').millas).toBe(50);
+    expect(r.find((x) => x.plataforma === 'flex').millas).toBe(0);
+  });
+  it('día solo de Lyft: el odómetro entero es de Lyft', () => {
+    const r = withJornadaMiles([lyft], jor(1000, 1120));
+    expect(r[0].millas).toBe(120);
+  });
+});
