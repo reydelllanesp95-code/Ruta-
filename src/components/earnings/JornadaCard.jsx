@@ -49,7 +49,7 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
       <div className="flex items-center justify-between text-[12.5px]" style={{ color: T.textSecondary }}>
         <span>
           {abierta
-            ? `Saliste a las ${abierta.horaSalida} · ${vehicleLabel(abierta.vehiculo)} · ${abierta.odoSalida}${abierta.horaParada ? ` · paraste a las ${abierta.horaParada}` : ""}`
+            ? `Saliste a las ${abierta.horaSalida} · ${vehicleLabel(abierta.vehiculo)} · ${abierta.odoSalida}${(abierta.pausas || []).map((p) => ` · pausa ${p.desde}–${p.hasta}`).join("")}${abierta.horaParada ? ` · paraste a las ${abierta.horaParada}` : ""}`
             : millasHoy > 0
               ? `Hoy: ${millasHoy} millas`
               : "Hoy no has salido"}
@@ -84,7 +84,7 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
         <>
         {abierta && (
           abierta.horaParada ? (
-            <button type="button" onClick={() => onSave(jornadas.map((j) => (j.id === abierta.id ? seguirTrabajando(j) : j)))} className="w-full text-[13.5px] py-2" style={{ color: T.textSecondary, minHeight: 44 }}>
+            <button type="button" onClick={() => onSave(jornadas.map((j) => (j.id === abierta.id ? seguirTrabajando(j, ahora()) : j)))} className="w-full text-[13.5px] py-2" style={{ color: T.textSecondary, minHeight: 44 }}>
               Volví a trabajar
             </button>
           ) : (

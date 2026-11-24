@@ -263,7 +263,8 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   // reparto). DERIVADO, nunca se persiste.
   const vCfgs = useMemo(() => vehicleConfigs(config, fuelups), [config, fuelups]);
   const configFor = useMemo(
-    () => (r) => ({ ...vCfgs[vehicleOf(r)].config, mpg: 1, gas_price: gasPorMilla({ routes: routesVista, fuelups }, r.fecha) }),
+    // Mantenimiento: el pagado se resta en los totales, no por turno.
+    () => (r) => ({ ...vCfgs[vehicleOf(r)].config, mpg: 1, gas_price: gasPorMilla({ routes: routesVista, fuelups }, r.fecha), maintenance_cost_per_mile: 0 }),
     [vCfgs, routesVista, fuelups]
   );
   const effByVehicle = useMemo(
@@ -461,7 +462,6 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
     () => ({ routes: routesVista, meals, tolls, fuelups, maints, jornadas, configFor }),
     [routesVista, meals, tolls, fuelups, maints, jornadas, configFor]
   );
-  const hoyR = useMemo(() => resumenRango(datos, hoy, hoy), [datos, hoy]);
   const semanaP = periodo("semana", hoy, startDow);
   const pendientes = useMemo(() => propinasPendientes(routesVista, hoy), [routesVista, hoy]);
   const umbrales = useMemo(() => umbralesDe(config), [config]);
@@ -628,18 +628,12 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
 
         {tab === "hoy" && (
           <>
-            <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} compact />
-            {plan.pendientes.length > 0 && <CierresPendientes pendientes={plan.pendientes} onCierre={apuntarCierre} />}
-            {metaPrev.n.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
-              <SemanaPasada
-                semana={metaPrev.n}
-                estado={metaPrev.estado}
-                u={metaPrev.estado.u}
-                compensa={metaPrev.compensa}
-                hecho={false}
-                onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}
-              />
-            )}
+            <JornadaCard
+              jornadas={jornadas}
+              lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
+              defaultVehicle={lastVehicle}
+              onSave={persistJornadas}
+            />
             {pendientes.length > 0 && (
               <div className="rounded-2xl px-3.5 py-3 flex items-center gap-3" style={{ backgroundColor: T.revisarDim, border: "1px solid #5A4720" }}>
                 <Clock size={20} style={{ color: T.revisar }} />
@@ -656,27 +650,19 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
                 </button>
               </div>
             )}
-
-            <JornadaCard
-              jornadas={jornadas}
-              lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
-              defaultVehicle={lastVehicle}
-              onSave={persistJornadas}
-            />
-
-
-            <div className="grid grid-cols-3 gap-2">
-              <Card className="!p-3"><Mini label="Ganado hoy" value={formatMoney(hoyR.ganado)} /></Card>
-              <Card className="!p-3"><Mini label="Horas" value={hoyR.horas ? `${hoyR.horas} h` : "—"} /></Card>
-              <Card className="!p-3"><Mini label="Millas" value={hoyR.millas ? `${Math.round(hoyR.millas)} mi` : "—"} /></Card>
-            </div>
-            {hoyR.registros === 0 && (
-              <div className="text-[12.5px] px-1" style={{ color: T.textFaint }}>
-                Lo de hoy aparece cuando subas las capturas (mañana, con las propinas).
-              </div>
+            {plan.pendientes.length > 0 && <CierresPendientes pendientes={plan.pendientes} onCierre={apuntarCierre} />}
+            {metaPrev.n.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
+              <SemanaPasada
+                semana={metaPrev.n}
+                estado={metaPrev.estado}
+                u={metaPrev.estado.u}
+                compensa={metaPrev.compensa}
+                hecho={false}
+                onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}
+              />
             )}
-
             {capturas}
+            <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} compact onTap={() => onTab("resumen")} tapLabel="Ver la semana en Resumen" />
           </>
         )}
 
@@ -842,7 +828,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
               </div>
             )}
 
-            <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
+            <CleaningPanel routes={routes} locales={locales} configFor={(r) => vCfgs[vehicleOf(r)].config} onSaveLocales={saveLocales} />
 
             <button onClick={() => onTab("codigos")} className="w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-[14px]" style={{ ...btnSec, color: T.textPrimary, minHeight: 48 }}>
               <span className="flex items-center gap-2"><KeyRound size={16} /> Códigos de acceso</span>

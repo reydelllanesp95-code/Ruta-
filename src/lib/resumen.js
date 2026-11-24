@@ -1,10 +1,11 @@
 // Resúmenes por periodo (semana de pago, mes, año) y por día: lo ganado, las
-// deducciones (gasolina pagada repartida por millas, mantenimiento estimado,
+// deducciones (gasolina pagada repartida por millas, mantenimiento pagado,
 // comida y peajes apuntados) y el neto. Lógica pura; se calcula al mostrar, no se guarda.
 
-import { round2, routeEconomics, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
+import { round2, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
 import { deliveryOnly, platformOf, platformLabel, isShift } from "./platforms.js";
 import { horasJornada } from "./jornada.js";
+import { MAINT_TYPE_LABELS, MEAL_TYPE_LABELS } from "./constants.js";
 
 function iso(d) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -109,7 +110,7 @@ export function gasPorMilla(datos, fecha) {
 // Las horas de un día con jornada son las de la jornada (salida → «paré» o
 // llegada); sin jornada, las de sus turnos.
 export function resumenRango(datos, desde, hasta) {
-  const { routes = [], meals = [], tolls = [], fuelups = [], jornadas = [], configFor } = datos;
+  const { routes = [], meals = [], tolls = [], fuelups = [], jornadas = [] } = datos;
   const horasDia = new Map();
   for (const j of jornadas) {
     if (!enRango(j.fecha, desde, hasta)) continue;
@@ -117,18 +118,16 @@ export function resumenRango(datos, desde, hasta) {
     if (h != null) horasDia.set(j.fecha, round2((horasDia.get(j.fecha) || 0) + h));
   }
   const regs = deliveryOnly(routes).filter((r) => enRango(r.fecha, desde, hasta));
-  let ganado = 0, propinas = 0, horas = 0, millas = 0, mantenimiento = 0;
+  let ganado = 0, propinas = 0, horas = 0, millas = 0;
   const apps = new Map();
   const dias = new Set();
   for (const r of regs) {
-    const eco = routeEconomics(r, configFor ? configFor(r) : undefined);
     const g = Number(r.ganancia) || 0;
     const h = Number(r.horasReales) > 0 ? Number(r.horasReales) : Number(r.horas) > 0 ? Number(r.horas) : 0;
     ganado += g;
     propinas += Number(r.propina) || 0;
     if (!horasDia.has(r.fecha)) horas += h;
     millas += Number(r.millas) || 0;
-    mantenimiento += eco.maintenance_est;
     dias.add(r.fecha);
     const k = platformOf(r);
     const a = apps.get(k) || { plataforma: k, label: platformLabel(k), ganado: 0, horas: 0, registros: 0 };
@@ -141,6 +140,8 @@ export function resumenRango(datos, desde, hasta) {
   const comida = meals.filter((m) => enRango(String(m.fecha), desde, hasta)).reduce((s, m) => s + costoReal(m.costo), 0);
   const peajes = tolls.filter((t) => enRango(String(t.fecha), desde, hasta)).reduce((s, t) => s + costoReal(t.monto), 0);
   const gasolinaPagada = pagadoEn(fuelups, desde, hasta);
+  // Mantenimiento: lo pagado en el rango (decisión de Rey, 24-nov-2026).
+  const mantenimiento = (datos.maints || []).filter((m) => enRango(String(m.fecha), desde, hasta)).reduce((s, m) => s + costoReal(m.costo), 0);
   const deducciones = {
     gasolina: gasolinaRango(datos, desde, hasta),
     mantenimiento: round2(mantenimiento),
@@ -233,4 +234,37 @@ export function promedioDia(datos, fecha, semanas = 4) {
     netoHora: r.horas > 0 ? round2(r.neto / r.horas) : null,
     label: n ? `tu día promedio (${n} días)` : "sin días anteriores",
   };
+}
+
+// Detalle de gastos de un rango para poder abrir cada categoría: cada gasto
+// con fecha, monto y nota. La gasolina muestra lo pagado en las semanas
+// (lunes→domingo) que tocan el rango, porque se reparte por millas.
+export function detalleGastos(datos, desde, hasta) {
+  const { fuelups = [], maints = [], meals = [], tolls = [] } = datos;
+  const gDesde = periodo("semana", desde, SEMANA_GAS).desde;
+  const gHasta = periodo("semana", hasta, SEMANA_GAS).hasta;
+  const lista = (xs, campo, nota, a = desde, b = hasta) =>
+    xs
+      .filter((x) => enRango(String(x.fecha), a, b) && costoReal(x[campo]) > 0)
+      .map((x) => ({ fecha: String(x.fecha), monto: round2(costoReal(x[campo])), nota: nota(x) }))
+      .sort((x, y) => x.fecha.localeCompare(y.fecha));
+  return {
+    gasolina: lista(fuelups, "costo", (x) => (x.vehiculo === "tucson" ? "Tucson" : x.vehiculo === "kia" ? "Kia" : ""), gDesde, gHasta),
+    gasolinaSemanas: { desde: gDesde, hasta: gHasta },
+    mantenimiento: lista(maints, "costo", (x) => MAINT_TYPE_LABELS[x.tipo] || x.tipo || ""),
+    comida: lista(meals, "costo", (x) => x.nota || MEAL_TYPE_LABELS[x.tipo] || ""),
+    peajes: lista(tolls, "monto", (x) => x.lugar || (x.agencia === "epass" ? "E-PASS" : x.agencia === "otro" ? "Peaje" : "SunPass")),
+  };
+}
+
+// Por día del rango: ganado de reparto y gastos apuntados ese día (sin la
+// gasolina, que va por semana).
+export function porDia(datos, desde, hasta) {
+  const out = [];
+  for (let d = desde; d <= hasta; d = addDays(d, 1)) {
+    const r = resumenRango({ ...datos, fuelups: [] }, d, d);
+    const gastos = round2(r.deducciones.mantenimiento + r.deducciones.comida + r.deducciones.peajes);
+    out.push({ fecha: d, ganado: r.ganado, gastos, gasolina: gasolinaRango(datos, d, d) });
+  }
+  return out;
 }

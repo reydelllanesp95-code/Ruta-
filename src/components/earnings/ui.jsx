@@ -64,22 +64,56 @@ export function Mini({ label, value }) {
   );
 }
 
-export function Deducciones({ d, titulo = "Deducciones" }) {
+const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+export const fechaCortaUI = (f) => `${Number(f.slice(8, 10))} ${MES_CORTO[Number(f.slice(5, 7)) - 1]}`;
+
+// Deducciones con cada fila tocable: abre la lista de gastos de esa categoría
+// (`detalle` de detalleGastos).
+export function Deducciones({ d, detalle = null, titulo = "Deducciones" }) {
+  const [abierta, setAbierta] = React.useState(null);
   const max = Math.max(d.gasolina, d.mantenimiento, d.comida, d.peajes, 1);
-  const bar = (v) => (
-    <div className="h-1.5 rounded-full mt-0.5 mb-1" style={{ backgroundColor: T.border }}>
-      <div className="h-full rounded-full" style={{ width: `${Math.round((v / max) * 100)}%`, backgroundColor: "#FF7A72" }} />
-    </div>
-  );
+  const filas = [
+    ["gasolina", "Gasolina", "(pagada, repartida por millas)"],
+    ["mantenimiento", "Mantenimiento", "(pagado)"],
+    ["comida", "Comida", ""],
+    ["peajes", "Peajes", ""],
+  ];
   return (
     <Card>
-      <Eyebrow>{titulo}</Eyebrow>
-      <Row label="Gasolina" hint="(pagada, repartida por millas)" value={formatMoney(d.gasolina)} />
-      {bar(d.gasolina)}
-      <Row label="Mantenimiento" hint="(estimado)" value={formatMoney(d.mantenimiento)} />
-      {bar(d.mantenimiento)}
-      <Row label="Comida" value={formatMoney(d.comida)} />
-      <Row label="Peajes" value={formatMoney(d.peajes)} />
+      <Eyebrow right={detalle ? "toca para ver" : null}>{titulo}</Eyebrow>
+      {filas.map(([k, label, hint]) => {
+        const open = abierta === k;
+        const items = detalle ? detalle[k] || [] : [];
+        return (
+          <div key={k}>
+            <button type="button" disabled={!detalle} aria-expanded={open} onClick={() => setAbierta(open ? null : k)} className="w-full text-left" style={{ minHeight: 40 }}>
+              <Row label={<>{detalle ? (open ? "▾ " : "▸ ") : ""}{label}</>} hint={hint} value={formatMoney(d[k])} />
+              <div className="h-1.5 rounded-full mt-0.5 mb-1" style={{ backgroundColor: T.border }}>
+                <div className="h-full rounded-full" style={{ width: `${Math.round((d[k] / max) * 100)}%`, backgroundColor: "#FF7A72" }} />
+              </div>
+            </button>
+            {open && (
+              <div className="rounded-lg px-2.5 py-1.5 mb-2" style={{ backgroundColor: T.surfaceRaised }}>
+                {k === "gasolina" && (
+                  <div className="text-[11.5px] mb-1" style={{ color: T.textFaint }}>
+                    Pagado en la(s) semana(s) {fechaCortaUI(detalle.gasolinaSemanas.desde)} – {fechaCortaUI(detalle.gasolinaSemanas.hasta)}; aquí se resta la parte de estas millas.
+                  </div>
+                )}
+                {items.length === 0 ? (
+                  <div className="text-[12.5px] py-1" style={{ color: T.textFaint }}>Nada apuntado.</div>
+                ) : (
+                  items.map((x, i) => (
+                    <div key={i} className="flex justify-between text-[13px] py-0.5">
+                      <span style={{ color: T.textSecondary }}>{fechaCortaUI(x.fecha)}{x.nota ? ` · ${x.nota}` : ""}</span>
+                      <span className="gc-code">{formatMoney(x.monto)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </Card>
   );
 }

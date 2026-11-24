@@ -39,11 +39,12 @@ describe('resumenRango', () => {
     expect(r.millas).toBe(70);
     // Gasolina PAGADA (decisión de Rey, 24-nov-2026): $30 de la semana lun 3–dom 9,
     // que tiene 110 mi de reparto; a este rango le tocan 70 → 30·70/110 = 19.09.
-    // mant: 7; comida 7.5; peajes 2.25
-    expect(r.deducciones).toEqual({ gasolina: 19.09, mantenimiento: 7, comida: 7.5, peajes: 2.25, total: 35.84 });
-    expect(r.neto).toBe(49.16);
+    // Mantenimiento PAGADO (decisión de Rey, 24-nov-2026): el de feb no cae en esta semana → 0.
+    // comida 7.5; peajes 2.25
+    expect(r.deducciones).toEqual({ gasolina: 19.09, mantenimiento: 0, comida: 7.5, peajes: 2.25, total: 28.84 });
+    expect(r.neto).toBe(56.16);
     expect(r.horas).toBe(3);
-    expect(r.netoHora).toBe(16.39);
+    expect(r.netoHora).toBe(18.72);
     expect(r.gasolinaPagada).toBe(30);
     expect(r.porApp.map((a) => [a.plataforma, a.ganado])).toEqual([['flex', 50], ['lyft', 35]]);
   });
@@ -51,7 +52,8 @@ describe('resumenRango', () => {
     const p = periodo('semana', '2025-03-10', 6);
     const r = resumenPeriodo(datos, p, 6, 3);
     expect(r.anterior.ganado).toBe(40);
-    expect(r.serie.map((s) => s.neto)).toEqual([0, 25.09, 49.16]); // 40 − 30·40/110 − 40*0.1
+    expect(r.serie.map((s) => s.neto)).toEqual([0, 29.09, 56.16]); // 40 − 30·40/110
+    expect(resumenRango(datos, '2025-02-01', '2025-02-28').deducciones.mantenimiento).toBe(60); // pagado en feb
   });
   it('día: registros en orden, incluida la limpieza', () => {
     const d = resumenDia(datos, '2025-03-08');
@@ -102,5 +104,26 @@ describe('día en Resumen', () => {
     expect(p.dias).toBe(2);
     expect(p.ganado).toBe(150);
     expect(p.horas).toBe(2);
+  });
+});
+
+describe('detalle de gastos (criterio 5 de docs/criterios-pausas-gastos-hoy.md)', () => {
+  it('lista cada gasto por categoría y la gasolina de las semanas lun–dom del rango', async () => {
+    const { detalleGastos, porDia } = await import('../resumen.js');
+    const d = {
+      routes: [t('2025-03-04', 'flex', 100, 0, 60)],
+      fuelups: [{ fecha: '2025-03-02', costo: 40, vehiculo: 'kia' }, { fecha: '2025-03-06', costo: 50, vehiculo: 'kia' }],
+      maints: [{ fecha: '2025-03-05', costo: 30, tipo: 'oil' }],
+      meals: [{ fecha: '2025-03-04', costo: 12, tipo: 'almuerzo' }],
+      tolls: [{ fecha: '2025-03-04', monto: 2.5, agencia: 'sunpass', lugar: '' }],
+    };
+    const g = detalleGastos(d, '2025-03-04', '2025-03-04');
+    expect(g.gasolina).toEqual([{ fecha: '2025-03-06', monto: 50, nota: 'Kia' }]); // semana 3–9
+    expect(g.mantenimiento).toEqual([]);
+    expect(g.comida).toEqual([{ fecha: '2025-03-04', monto: 12, nota: 'Almuerzo' }]);
+    expect(g.peajes).toEqual([{ fecha: '2025-03-04', monto: 2.5, nota: 'SunPass' }]);
+    const dias = porDia(d, '2025-03-03', '2025-03-09');
+    expect(dias.find((x) => x.fecha === '2025-03-04')).toEqual({ fecha: '2025-03-04', ganado: 100, gastos: 14.5, gasolina: 50 });
+    expect(dias.find((x) => x.fecha === '2025-03-05').gastos).toBe(30);
   });
 });

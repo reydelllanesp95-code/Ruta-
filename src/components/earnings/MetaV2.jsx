@@ -24,10 +24,12 @@ export function Inversiones({ lista }) {
   );
 }
 
-export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, hist = null, desdeSel, children }) {
+export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, hist = null, desdeSel, onTap = null, tapLabel = "", onSemana = null, children }) {
   const { hitos } = estado;
   return (
     <Card>
+      {(() => {
+        const barra = (
       <MetaBar
         neta={estado.neta}
         tramos={hitos.tramos}
@@ -38,6 +40,14 @@ export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, h
         porLlegar={porLlegar}
         compact={compact}
       />
+        );
+        return onTap ? (
+          <button type="button" onClick={onTap} className="w-full text-left" aria-label={tapLabel || "Ver detalle de la semana"}>
+            {barra}
+            <div className="text-[12px] mt-1 underline" style={{ color: T.textSecondary }}>{tapLabel || "Ver detalle"}</div>
+          </button>
+        ) : barra;
+      })()}
       {!compact && <Inversiones lista={estado.inversiones} />}
       {children}
       {hist && hist.length > 0 && (
@@ -47,10 +57,10 @@ export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, h
           </div>
           <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${hist.length}, minmax(0, 1fr))` }}>
             {hist.map((h) => (
-              <div key={h.desde} className="flex flex-col items-center gap-1">
-                <div className="w-full rounded-md" style={{ height: 22, backgroundColor: h.neta > 0 ? h.color : T.border, opacity: h.desde === desdeSel ? 1 : 0.75 }} title={`${h.label}: ${formatMoney(h.neta)}`} />
+              <button type="button" key={h.desde} disabled={!onSemana} onClick={() => onSemana && onSemana(h.desde)} aria-label={`Semana ${h.label}: ${formatMoney(h.neta)}`} className="flex flex-col items-center gap-1" style={{ minHeight: 40 }}>
+                <div className="w-full rounded-md" style={{ height: 22, backgroundColor: h.neta > 0 ? h.color : T.border, opacity: h.desde === desdeSel ? 1 : 0.75, outline: h.desde === desdeSel ? `2px solid ${T.textPrimary}` : "none" }} />
                 <span className="text-[9.5px] text-center leading-tight" style={{ color: h.desde === desdeSel ? T.textPrimary : T.textFaint }}>{h.label.split(" – ")[0]}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
