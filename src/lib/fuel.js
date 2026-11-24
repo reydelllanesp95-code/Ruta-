@@ -14,9 +14,10 @@ export function makeFuelup({ fecha, galones, costo, odometro, vehiculo }) {
     id: makeUUID(),
     vehiculo: vehiculo || "kia",
     fecha: String(fecha || "").slice(0, 10),
-    galones: Number(galones) || 0,
+    // Llenado solo con el $: sin galones ni odómetro (null, no 0).
+    galones: Number(galones) > 0 ? Number(galones) : null,
     costo: costo === "" || costo == null ? null : Number(costo),
-    odometro: Number(odometro) || 0,
+    odometro: Number(odometro) > 0 ? Number(odometro) : null,
     creadoEn: new Date().toISOString(),
   };
 }
@@ -25,7 +26,12 @@ export function makeFuelup({ fecha, galones, costo, odometro, vehiculo }) {
 // mismo carro. Permite llenados atrasados: el odómetro solo tiene que encajar
 // con el orden por fecha (mayor que los de fechas anteriores, menor que los de
 // fechas posteriores) y no repetir uno existente. Devuelve { ok, error }.
-export function validateFuelup({ galones, odometro, fecha }, fuelups = []) {
+export function validateFuelup({ galones, odometro, fecha, costo }, fuelups = []) {
+  const vacio = (v) => v === "" || v == null;
+  if (vacio(galones) && vacio(odometro)) {
+    const c = Number(costo);
+    return Number.isFinite(c) && c > 0 ? { ok: true } : { ok: false, error: "Pon cuánto pagaste." };
+  }
   const g = Number(galones);
   if (!Number.isFinite(g) || g <= 0) {
     return { ok: false, error: "Los galones deben ser un número mayor que 0." };
@@ -77,7 +83,7 @@ export const WINDOW_MILES = 1000;
 // creciente. `gap` = demasiadas millas, faltan llenados por apuntar.
 export function validPairs(fuelups) {
   const sorted = (fuelups || [])
-    .filter((f) => Number.isFinite(Number(f.odometro)))
+    .filter((f) => Number(f.odometro) > 0)
     .slice()
     .sort((a, b) => Number(a.odometro) - Number(b.odometro));
   const pairs = [];
@@ -107,6 +113,10 @@ export function fillInfoById(fuelups) {
 // cada llenado suelto miente, pero el total del tramo no. Null si no hay datos
 // o si el resultado es imposible para un carro (fuera de 8–45).
 export function realMpg(fuelups) {
+  // Si el último llenado se apuntó solo con el $, la cadena de odómetros está
+  // rota (otros llenados sin apuntar): el MPG «real» viejo ya no vale.
+  const ultimo = (fuelups || []).slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || String(a.creadoEn || "").localeCompare(String(b.creadoEn || ""))).at(-1);
+  if (ultimo && !(Number(ultimo.odometro) > 0)) return null;
   const pairs = validPairs(fuelups);
   let millas = 0;
   let galones = 0;
