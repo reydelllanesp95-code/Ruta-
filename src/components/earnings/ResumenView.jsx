@@ -180,6 +180,10 @@ function LineaDeTiempo({ lista, jornadas }) {
   const items = [];
   for (const j of jornadas) {
     items.push({ hora: j.horaSalida, texto: `Salí de casa · ${Number(j.odoSalida).toLocaleString("en-US")}`, tipo: "casa" });
+    for (const p of j.pausas || []) {
+      items.push({ hora: p.desde, texto: "Pausa", tipo: "casa" });
+      items.push({ hora: p.hasta, texto: "Volví a trabajar", tipo: "casa" });
+    }
     if (j.horaParada) items.push({ hora: j.horaParada, texto: "Paré de trabajar", tipo: "casa" });
     if (j.horaLlegada) items.push({ hora: j.horaLlegada, texto: `Llegué a casa · ${Number(j.odoLlegada).toLocaleString("en-US")}`, tipo: "casa" });
   }

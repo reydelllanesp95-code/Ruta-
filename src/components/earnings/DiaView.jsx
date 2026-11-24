@@ -55,6 +55,11 @@ export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, rende
                     {j.horaParada && <Caja titulo="Paré" hora={j.horaParada} />}
                     <Caja titulo="Llegué" hora={j.horaLlegada || "—"} odo={j.odoLlegada} />
                   </div>
+                  {(j.pausas || []).length > 0 && (
+                    <div className="text-[12.5px] mt-1" style={{ color: T.textSecondary }}>
+                      Pausas: {j.pausas.map((p) => `${p.desde}–${p.hasta}`).join(" · ")}
+                    </div>
+                  )}
                   {onSaveJornada && (
                     <button type="button" onClick={() => setEditandoId(j.id)} className="text-[12.5px] underline mt-1" style={{ color: T.textSecondary, minHeight: 32 }}>
                       Editar horas

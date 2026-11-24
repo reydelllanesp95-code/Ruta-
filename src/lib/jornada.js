@@ -79,10 +79,12 @@ export function pararTrabajo(j, hora) {
   return { ...j, horaParada: hora };
 }
 
-// «Volví a trabajar»: anula la parada.
-export function seguirTrabajando(j) {
+// «Volví a trabajar»: la parada abierta pasa a ser una pausa cerrada (desde la
+// parada hasta ahora) y deja de restar como fin de jornada.
+export function seguirTrabajando(j, hora) {
   const { horaParada, ...resto } = j;
-  return resto;
+  if (!horaParada || !hora) return resto;
+  return { ...resto, pausas: [...(j.pausas || []), { desde: horaParada, hasta: hora }] };
 }
 
 function minutos(hhmm) {
@@ -90,18 +92,23 @@ function minutos(hhmm) {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
-// Horas de trabajo de la jornada: salida → parada (o llegada). Null si aún no
-// hay fin.
+// Horas de trabajo de la jornada: salida → parada (o llegada), menos las
+// pausas cerradas. Null si aún no hay fin.
 export function horasJornada(j) {
   const a = minutos(j && j.horaSalida);
   const b = minutos((j && j.horaParada) || (j && j.horaLlegada));
   if (a == null || b == null || a === b) return null;
-  return round2(((b - a + 1440) % 1440) / 60);
+  const total = (b - a + 1440) % 1440;
+  const pausa = (j.pausas || []).reduce((s, p) => {
+    const d = minutos(p.desde), h = minutos(p.hasta);
+    return d == null || h == null ? s : s + ((h - d + 1440) % 1440);
+  }, 0);
+  return round2(Math.max(0, total - pausa) / 60);
 }
 
 // Corregir las horas a mano (p. ej. se olvidó tocar «Paré»). Vacío en
 // horaParada la quita. No toca odómetros.
-export function editarHorasJornada(j, { horaSalida, horaParada = "", horaLlegada = "" }) {
+export function editarHorasJornada(j, { horaSalida, horaParada = "", horaLlegada = "", pausas = j.pausas || [] }) {
   const ok = (h) => minutos(h) != null && minutos(h) < 1440;
   if (!ok(horaSalida)) return { ok: false, error: "La hora de salida no es válida." };
   if (horaParada && !ok(horaParada)) return { ok: false, error: "La hora en que paraste no es válida." };
@@ -112,7 +119,19 @@ export function editarHorasJornada(j, { horaSalida, horaParada = "", horaLlegada
     return { ok: false, error: "«Paré» tiene que estar entre la salida y la llegada." };
   }
   if (horaParada && desde(horaParada) === 0) return { ok: false, error: "«Paré» no puede ser la misma hora que la salida." };
-  const out = { ...j, horaSalida, ...(cerrada ? { horaLlegada } : {}) };
+  // Pausas: dentro de la jornada (antes de la parada final o la llegada) y con
+  // hasta > desde.
+  const fin = horaParada || (cerrada ? horaLlegada : null);
+  const limpias = [];
+  for (const p of pausas || []) {
+    if (!p || (!p.desde && !p.hasta)) continue;
+    if (!ok(p.desde) || !ok(p.hasta)) return { ok: false, error: "Revisa las horas de la pausa." };
+    if (!(desde(p.hasta) > desde(p.desde))) return { ok: false, error: `La pausa de las ${p.desde} tiene que terminar después de empezar.` };
+    if (desde(p.desde) === 0 || (fin && desde(p.hasta) > desde(fin))) return { ok: false, error: `La pausa ${p.desde}–${p.hasta} queda fuera de la jornada.` };
+    limpias.push({ desde: p.desde, hasta: p.hasta });
+  }
+  limpias.sort((x, y) => desde(x.desde) - desde(y.desde));
+  const out = { ...j, horaSalida, ...(cerrada ? { horaLlegada } : {}), pausas: limpias };
   if (horaParada) out.horaParada = horaParada;
   else delete out.horaParada;
   return { ok: true, jornada: out };

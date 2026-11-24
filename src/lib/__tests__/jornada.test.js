@@ -86,3 +86,33 @@ describe('editar horas de la jornada', () => {
     expect(editarHorasJornada(abierta, { horaSalida: '05:30', horaParada: '13:00' }).jornada).toMatchObject({ horaSalida: '05:30', horaParada: '13:00' });
   });
 });
+
+describe('pausas (criterios 1–3 de docs/criterios-pausas-gastos-hoy.md)', () => {
+  it('1. Paré 9:30, Volví 11:20, Paré 15:00, llegar 15:30 → 6.17 h', async () => {
+    const { pararTrabajo, seguirTrabajando, horasJornada } = await import('../jornada.js');
+    let j = { id: 'j', fecha: '2026-11-24', horaSalida: '07:00', odoSalida: 100, odoLlegada: null, horaLlegada: '' };
+    j = pararTrabajo(j, '09:30');
+    j = seguirTrabajando(j, '11:20');
+    expect(j.pausas).toEqual([{ desde: '09:30', hasta: '11:20' }]);
+    expect(j.horaParada).toBeUndefined();
+    j = pararTrabajo(j, '15:00');
+    j = { ...j, horaLlegada: '15:30', odoLlegada: 150 };
+    expect(horasJornada(j)).toBe(6.17);
+  });
+  it('2. editar horas: añadir, quitar y validar pausas', async () => {
+    const { editarHorasJornada, horasJornada } = await import('../jornada.js');
+    const j = { id: 'j', fecha: '2026-11-24', horaSalida: '07:00', odoSalida: 100, odoLlegada: 150, horaLlegada: '15:30' };
+    const a = editarHorasJornada(j, { horaSalida: '07:00', horaParada: '15:00', horaLlegada: '15:30', pausas: [{ desde: '09:30', hasta: '11:20' }] });
+    expect(a.ok).toBe(true);
+    expect(horasJornada(a.jornada)).toBe(6.17);
+    expect(editarHorasJornada(a.jornada, { horaSalida: '07:00', horaParada: '15:00', horaLlegada: '15:30', pausas: [] }).jornada.pausas).toEqual([]);
+    expect(editarHorasJornada(j, { horaSalida: '07:00', horaLlegada: '15:30', pausas: [{ desde: '11:20', hasta: '09:30' }] }).ok).toBe(false);
+    expect(editarHorasJornada(j, { horaSalida: '07:00', horaParada: '15:00', horaLlegada: '15:30', pausas: [{ desde: '15:10', hasta: '15:20' }] }).ok).toBe(false);
+    expect(editarHorasJornada(j, { horaSalida: '07:00', horaLlegada: '15:30', pausas: [{ desde: '06:00', hasta: '06:30' }] }).ok).toBe(false);
+  });
+  it('3. jornadas viejas (sin pausas) dan las mismas horas', async () => {
+    const { horasJornada } = await import('../jornada.js');
+    expect(horasJornada({ horaSalida: '06:00', horaParada: '14:00', horaLlegada: '18:00' })).toBe(8);
+    expect(horasJornada({ horaSalida: '06:00', horaLlegada: '18:00' })).toBe(12);
+  });
+});
