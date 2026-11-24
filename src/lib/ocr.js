@@ -101,9 +101,13 @@ export async function readCaptureImages(files, routes, onProgress = () => {}) {
       for (const f of files) otros.push((await worker.recognize(await preparar(f, INTENTOS[n + 1].umbral))).data.text);
       r = readCapture(text, routes, undefined, [otros.join("\n")]);
     }
-    if (r.ok) return { ...r, text };
-    primero = primero || { ...r, text };
+    // Sin avisos: listo. Con avisos se prueba la otra forma de preparar la
+    // foto y se queda la lectura que más saca (a igualdad, la de menos avisos).
+    if (r.ok && !r.avisos?.length) return { ...r, text };
+    const mejorQue = (a, b) => !b || (a.ok && (!b.ok || a.leidos > b.leidos || (a.leidos === b.leidos && a.avisos.length < b.avisos.length)));
+    if (mejorQue(r, primero)) primero = { ...r, text };
   }
+  if (primero.ok) return primero;
   return {
     ...primero,
     error: `${primero.error} No pude leer bien la foto: pega el texto de esa captura (Fotos → icono de texto → «Copiar todo») o corrige el número aquí abajo y toca «Leer».`,

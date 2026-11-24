@@ -47,10 +47,24 @@ describe('parseFlexText', () => {
     expect(r.items).toHaveLength(4);
     expect(r.pagos).toEqual([{ fecha: '2025-03-06', total: 400 }]);
   });
-  it('no adivina: error si falta un importe o el total no cuadra', () => {
-    expect(parseFlexText(TEXTO.replace('$70\n', ''), HOY).ok).toBe(false);
-    expect(parseFlexText(TEXTO.replace('$70', '$71'), HOY).ok).toBe(false);
+  it('no adivina: deja fuera la fila que no cuadra, avisa y sigue con el resto', () => {
+    const r = parseFlexText(TEXTO.replace('$70', '$71'), HOY);
+    expect(r.ok).toBe(true);
+    expect(r.items).toHaveLength(3);
+    expect(r.avisos[0]).toMatch(/8 mar 14:00–16:00.*no lo puse/);
     expect(parseFlexText('hola', HOY).ok).toBe(false);
+  });
+  it('pantalla de inicio de Flex: saldo, pago programado y propina pendiente', () => {
+    const t = 'Saldo actual\n$997.05\nPago programado para el sáb, mar 8\nRetirar dinero\nmarzo\nsáb, mar 8\n6:46 p.m. - 8:23 p.m.\n$48.50\nConsejos pendientes\n' + TEXTO;
+    const r = parseFlexText(t, HOY);
+    expect(r.items).toHaveLength(5);
+    expect(r.items[0]).toMatchObject({ fecha: '2025-03-08', horaInicio: '18:46', base: 48.5, propina: 0, propinaPendiente: true });
+    expect(r.avisos).toEqual(['8 mar 18:46–20:23: propina pendiente; la pongo cuando Flex la muestre.']);
+  });
+  it('propina pendiente no borra una propina ya apuntada', () => {
+    const t = 'sáb, mar 8\n2:00 p.m. - 4:00 p.m.\n$40\nConsejos pendientes';
+    const ya = makeShift({ plataforma: 'flex', vehiculo: 'kia', fecha: '2025-03-08', millas: '0', bloques: [{ horaInicio: '14:00', horaFin: '16:00', pago: '40', propina: '12' }] });
+    expect(planFlexImport(parseFlexText(t, HOY).items, [ya]).cambios).toEqual([]);
   });
   it('un mes en el futuro es del año anterior', () => {
     expect(parseFlexText('vie, dic 5\n1:00 p.m. - 2:00 p.m.\n$10\nBase: $10\nConsejos: $0', HOY).items[0].fecha).toBe('2024-12-05');
@@ -122,7 +136,7 @@ $40.50`;
 describe('Lyft', () => {
   it('lee el día: total, propinas, viajes y primera/última hora', () => {
     const r = parseLyftText(LYFT, HOY);
-    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasTrabajo: null, horasFuente: null }] });
+    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasTrabajo: null, horasFuente: null }], avisos: [] });
   });
   it('con estadísticas usa el tiempo reservado (no el conectado) e ignora sus importes', () => {
     expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].horasTrabajo).toBe(2.17);
