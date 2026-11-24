@@ -30,7 +30,7 @@ import {
   monthLabel,
 } from "../lib/earnings.js";
 import { loadConfig, saveConfig } from "../lib/config.js";
-import { makeFuelup } from "../lib/fuel.js";
+import { makeFuelup, fuelSpendForKey } from "../lib/fuel.js";
 import { vehicleConfigs, vehicleOf, vehicleLabel, VEHICLE_IDS, VEHICLES } from "../lib/vehicles.js";
 import { makeMaint } from "../lib/maintenance.js";
 import { makeMeal, mealSpendForKey } from "../lib/meals.js";
@@ -450,6 +450,8 @@ export default function Earnings() {
             mealSpendForKey(meals, mesInfo.totals.key, config.pay_week_start_day) +
             tollSpendForKey(tolls, mesInfo.totals.key, config.pay_week_start_day)
           }
+          gasolinaSemana={fuelSpendForKey(fuelups, semanaInfo.totals.key, config.pay_week_start_day)}
+          gasolinaMes={fuelSpendForKey(fuelups, mesInfo.totals.key, config.pay_week_start_day)}
           semanaLabel={semanaInfo.label}
           mesLabel={mesInfo.label}
         />

@@ -13,6 +13,7 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
   const [plataforma, setPlataforma] = useState(null);
   const [leyendo, setLeyendo] = useState("");
   const fotosRef = useRef(null);
+  const textoRef = useRef(null);
 
   async function onFotos(e) {
     const files = [...(e.target.files || [])];
@@ -39,7 +40,10 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
       const t = await navigator.clipboard.readText();
       if (t) setTexto((prev) => (prev ? prev + "\n" + t : t));
     } catch {
-      setError("No pude leer el portapapeles: mantén pulsado el recuadro y elige «Pegar».");
+      // iOS no siempre deja a la app leer el portapapeles: se deja el
+      // recuadro listo para pegar a mano.
+      setError("Tu iPhone no deja leerlo desde aquí: mantén pulsado el recuadro y elige «Pegar». Si el texto ya está, toca «Leer».");
+      textoRef.current?.focus();
     }
   }
 
@@ -75,6 +79,7 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
         Elige las capturas de una sola app (Ganancias de Flex, o Actividad diaria + Estadísticas de Lyft). Si una no se lee bien, pega su texto (Fotos → icono de texto → «Copiar todo») o corrige aquí y toca «Leer».
       </div>
       <textarea
+        ref={textoRef}
         value={texto}
         onChange={(e) => { setTexto(e.target.value); setPlan(null); }}
         rows={5}
