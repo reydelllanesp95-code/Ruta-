@@ -57,7 +57,7 @@ import DiaView, { nombreDia } from "./earnings/DiaView.jsx";
 import { Card, Eyebrow, Row, Mini, Segmented, MetaBar } from "./earnings/ui.jsx";
 import SemanaPasada from "./earnings/SemanaPasada.jsx";
 import { netaMeta, tramoMeta, umbralesDe } from "../lib/meta.js";
-import { periodo, resumenRango, propinasPendientes, filasAño, addDays } from "../lib/resumen.js";
+import { periodo, resumenRango, propinasPendientes, filasAño, addDays, gasPorMilla } from "../lib/resumen.js";
 import { withJornadaMiles } from "../lib/jornada.js";
 import {
   makeShift,
@@ -216,18 +216,22 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   }
   const deleteToll = (id) => persistTolls(tolls.filter((t) => t.id !== id));
 
-  // Config de costos POR VEHÍCULO: MPG real con sus propios llenados (o el
-  // asumido) y su mantenimiento/milla. DERIVADO, nunca se persiste. [ajuste 2]
+  // Rutas tal como se muestran: con las millas de las jornadas repartidas
+  // entre los trabajos de cada día (cálculo; lo guardado no cambia).
+  const routesVista = useMemo(() => withJornadaMiles(routes, jornadas), [routes, jornadas]);
+
+  // Config de costos POR VEHÍCULO (mantenimiento/milla). La gasolina es la
+  // PAGADA: $ por milla de la semana de cada registro (pagado ÷ millas de
+  // reparto). DERIVADO, nunca se persiste.
   const vCfgs = useMemo(() => vehicleConfigs(config, fuelups), [config, fuelups]);
-  const configFor = useMemo(() => (r) => vCfgs[vehicleOf(r)].config, [vCfgs]);
+  const configFor = useMemo(
+    () => (r) => ({ ...vCfgs[vehicleOf(r)].config, mpg: 1, gas_price: gasPorMilla({ routes: routesVista, fuelups }, r.fecha) }),
+    [vCfgs, routesVista, fuelups]
+  );
   const effByVehicle = useMemo(
     () => Object.fromEntries(VEHICLE_IDS.map((id) => [id, vCfgs[id].effInfo])),
     [vCfgs]
   );
-
-  // Rutas tal como se muestran: con las millas de las jornadas repartidas
-  // entre los trabajos de cada día (cálculo; lo guardado no cambia).
-  const routesVista = useMemo(() => withJornadaMiles(routes, jornadas), [routes, jornadas]);
 
   // Agregaciones memoizadas: recalculan al cambiar rutas o los costos. [Aud 16]
   const agg = useMemo(
@@ -700,7 +704,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
               <Card className="!p-3"><Mini label={monthLabel(hoy.slice(0, 7))} value={formatMoney(gastoEn(gastoTipo, `${hoy.slice(0, 7)}-01`, `${hoy.slice(0, 7)}-31`))} /></Card>
             </div>
             {gastoTipo === "gasolina" && (
-              <FuelupsPanel defaultOpen fuelups={fuelups} effByVehicle={effByVehicle} weekStartDow={startDow} onAdd={addFuelup} onDelete={deleteFuelup} />
+              <FuelupsPanel defaultOpen fuelups={fuelups} weekStartDow={startDow} onAdd={addFuelup} onDelete={deleteFuelup} />
             )}
             {gastoTipo === "mant" && (
               <MaintenancePanel defaultOpen maints={maints} onAdd={addMaint} onDelete={deleteMaint} onApplyCostPerMile={applyMaintCostPerMile} />
@@ -746,16 +750,6 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
             </Card>
 
             <ConfigPanel config={config} onSave={onSaveConfig} />
-            <div className="text-[12px] px-1 -mt-1 space-y-0.5">
-              {VEHICLE_IDS.map((id) => {
-                const e = effByVehicle[id];
-                return (
-                  <div key={id} style={{ color: e.source === "real" ? T.ok : T.textFaint }}>
-                    {vehicleLabel(id)}: {e.source === "real" ? `MPG real ${e.real}` : `MPG asumido ${e.mpg}`}
-                  </div>
-                );
-              })}
-            </div>
 
             <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
 

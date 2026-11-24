@@ -11,13 +11,11 @@ import {
 import { forVehicle, vehicleLabel } from "../../lib/vehicles.js";
 import VehiclePicker from "./VehiclePicker.jsx";
 
-// Panel de llenados de gasolina (fuel-ups): MPG real + insights de gasto/frecuencia.
-// `effByVehicle` = { kia: effInfo, tucson: effInfo }. Todo se ve y valida por vehículo.
-export default function FuelupsPanel({ defaultOpen = false, fuelups: allFuelups, effByVehicle, weekStartDow = 6, onAdd, onDelete }) {
+// Panel de llenados de gasolina: lo pagado + gasto/frecuencia, por vehículo.
+export default function FuelupsPanel({ defaultOpen = false, fuelups: allFuelups, weekStartDow = 6, onAdd, onDelete }) {
   const [open, setOpen] = useState(defaultOpen);
   const [vehiculo, setVehiculo] = useState("kia");
   const fuelups = forVehicle(allFuelups, vehiculo);
-  const effInfo = effByVehicle[vehiculo];
   const [fecha, setFecha] = useState(todayISO());
   const [costo, setCosto] = useState("");
   const [error, setError] = useState("");
@@ -31,7 +29,6 @@ export default function FuelupsPanel({ defaultOpen = false, fuelups: allFuelups,
     if (!chk.ok) return setError(chk.error);
     onAdd({ fecha, costo, vehiculo });
     setCosto("");
-    setOdometro("");
   }
 
   const tramos = fillInfoById(fuelups);
@@ -51,13 +48,7 @@ export default function FuelupsPanel({ defaultOpen = false, fuelups: allFuelups,
         <span className="flex items-center gap-2 text-[13px]" style={{ color: T.textSecondary }}>
           <Fuel size={15} /> Gasolina · {allFuelups.length} llenado(s)
         </span>
-        <span className="flex items-center gap-2">
-          <span className="text-[12px]" style={{ color: effInfo.source === "real" ? T.ok : T.textFaint }}>
-            {open ? vehicleLabel(vehiculo) + ": " : ""}
-            {effInfo.source === "real" ? `MPG real ${effInfo.real}` : `MPG asumido ${effInfo.mpg}`}
-          </span>
-          <Chevron size={16} style={{ color: T.textFaint }} />
-        </span>
+        <Chevron size={16} style={{ color: T.textFaint }} />
       </button>
 
       {open && (
@@ -69,11 +60,6 @@ export default function FuelupsPanel({ defaultOpen = false, fuelups: allFuelups,
               setError("");
             }}
           />
-          {effInfo.source !== "real" && (
-            <div className="text-[12px]" style={{ color: T.textFaint }}>
-              Se usa el MPG asumido de este carro (lo cambias en el panel «Gas $… · MPG»).
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-2">
             <Field label="Fecha" value={fecha} onChange={setFecha} type="date" />

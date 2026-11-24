@@ -64,7 +64,7 @@ export function Mini({ label, value }) {
   );
 }
 
-export function Deducciones({ d, gasolinaPagada, titulo = "Deducciones" }) {
+export function Deducciones({ d, titulo = "Deducciones" }) {
   const max = Math.max(d.gasolina, d.mantenimiento, d.comida, d.peajes, 1);
   const bar = (v) => (
     <div className="h-1.5 rounded-full mt-0.5 mb-1" style={{ backgroundColor: T.border }}>
@@ -74,17 +74,12 @@ export function Deducciones({ d, gasolinaPagada, titulo = "Deducciones" }) {
   return (
     <Card>
       <Eyebrow>{titulo}</Eyebrow>
-      <Row label="Gasolina" hint="(estimada por millas)" value={formatMoney(d.gasolina)} />
+      <Row label="Gasolina" hint="(pagada, repartida por millas)" value={formatMoney(d.gasolina)} />
       {bar(d.gasolina)}
       <Row label="Mantenimiento" hint="(estimado)" value={formatMoney(d.mantenimiento)} />
       {bar(d.mantenimiento)}
       <Row label="Comida" value={formatMoney(d.comida)} />
       <Row label="Peajes" value={formatMoney(d.peajes)} />
-      {gasolinaPagada > 0 && (
-        <div className="text-[12.5px] mt-2 pt-2" style={{ color: T.textFaint, borderTop: `1px solid ${T.border}` }}>
-          Gasolina que pagaste: <span className="gc-code" style={{ color: T.textSecondary }}>{formatMoney(gasolinaPagada)}</span> (dato aparte; no se resta dos veces)
-        </div>
-      )}
     </Card>
   );
 }
