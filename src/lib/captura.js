@@ -237,7 +237,7 @@ const LYFT_TOKEN = new RegExp(
     // «de $1.00» suelto: el iPhone a veces parte «Bono … de $1.00» con la hora en medio
     `(?<suelto>\\bde\\s+\\$\\s*${AMOUNT})`,
     "(?<semana>semana del\\s+([a-z]{3})[a-z]*\\s+(\\d{1,2})\\s+al\\s+(?:([a-z]{3})[a-z]*\\s+)?(\\d{1,2}))",
-    "(?<conectado>tiempo (conectado|reservado)(?:[^\\d]{0,80}?)(\\d+)\\s*h(?:\\s*(\\d+)\\s*min)?)",
+    "(?<conectado>tiempo (conectado|reservado)(?:(?!tiempo (?:conectado|reservado)|kil)[^\\d]){0,80}?(\\d+)\\s*h(?:\\s*(\\d+)\\s*min)?)",
     // Lyft siempre muestra centavos; así se ignora el «$89» de la gráfica.
     "(?<dinero>\\$\\s*([\\d,]+\\.\\d{2}))",
     "(?<hora>\\b(\\d{1,2}):(\\d{2})\\s*(am|pm)\\b)",
@@ -250,7 +250,9 @@ export function isLyftText(text) {
 }
 
 // Devuelve { ok, dias: [{ fecha, total, propina, viajes, horaInicio, horaFin, horasTrabajo }], error }
-export function parseLyftText(text, today = new Date()) {
+// extra: textos alternativos (otras lecturas de la misma foto) de los que
+// tomar el «Tiempo reservado» si esta lectura no lo trae.
+export function parseLyftText(text, today = new Date(), extra = []) {
   const dias = [];
   let conectado = null;
   let reservado = null;
@@ -289,6 +291,12 @@ export function parseLyftText(text, today = new Date()) {
     }
   }
   if (!dias.length) return { ok: false, error: "No encontré el día de Lyft («dom 22 de nov»)." };
+  if (reservado == null) {
+    for (const t of extra) {
+      const m = normalize(t).match(/tiempo reservado(?:(?!tiempo (?:conectado|reservado)|kil)[^\d]){0,80}?(\d+)\s*h(?:\s*(\d+)\s*min)?/);
+      if (m) { reservado = round2(Number(m[1]) + Number(m[2] || 0) / 60); break; }
+    }
+  }
   const out = [];
   for (const d of dias) {
     const suma = round2(d.viajes.reduce((s, x) => s + x, 0));
@@ -304,6 +312,7 @@ export function parseLyftText(text, today = new Date()) {
       horaInicio: orden[0] || "",
       horaFin: orden.at(-1) || "",
       horasTrabajo: dias.length === 1 ? reservado ?? conectado : null,
+      horasFuente: dias.length !== 1 ? null : reservado != null ? "tiempo reservado" : conectado != null ? "tiempo conectado" : null,
       ...(dias.length === 1 && (reservado ?? conectado) && semana ? { semana } : {}),
     });
   }
@@ -331,7 +340,7 @@ export function planLyftImport(dias, routes) {
     const horario = d.horaInicio ? `${d.horaInicio}–${d.horaFin}` : "";
     const r = lyft.find((x) => x.fecha === d.fecha);
     if (!r) {
-      cambios.push({ tipo: "nuevo", plataforma: "lyft", fecha: d.fecha, horario, horaInicio: d.horaInicio, horaFin: d.horaFin, horas, pago, propina: d.propina, nota });
+      cambios.push({ tipo: "nuevo", plataforma: "lyft", fecha: d.fecha, horario, horaInicio: d.horaInicio, horaFin: d.horaFin, horas, horasFuente: otrosEnSemana ? "primer a último viaje" : d.horasFuente || "primer a último viaje", pago, propina: d.propina, nota });
       continue;
     }
     const antes = { pago: round2(r.pagoBase || 0), propina: round2(r.propina || 0) };
@@ -339,7 +348,7 @@ export function planLyftImport(dias, routes) {
       sinCambios += 1;
       continue;
     }
-    cambios.push({ tipo: "actualizar", plataforma: "lyft", routeId: r.id, fecha: d.fecha, horas, horaInicio: d.horaInicio, horaFin: d.horaFin,
+    cambios.push({ tipo: "actualizar", plataforma: "lyft", routeId: r.id, fecha: d.fecha, horas, horasFuente: otrosEnSemana ? "primer a último viaje" : d.horasFuente || "primer a último viaje", horaInicio: d.horaInicio, horaFin: d.horaFin,
       bloques: [{ idx: 0, horario: horario || "día", antes, despues: { pago, propina: d.propina } }] });
   }
   cambios.sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -367,9 +376,9 @@ export function applyLyftPlan(routes, plan, { vehiculo } = {}) {
 }
 
 // Un solo punto de entrada para la pantalla: decide Flex o Lyft.
-export function readCapture(text, routes, today = new Date()) {
+export function readCapture(text, routes, today = new Date(), extra = []) {
   if (isLyftText(text)) {
-    const r = parseLyftText(text, today);
+    const r = parseLyftText(text, today, extra);
     if (!r.ok) return r;
     return { ok: true, plataforma: "lyft", plan: planLyftImport(r.dias, routes) };
   }

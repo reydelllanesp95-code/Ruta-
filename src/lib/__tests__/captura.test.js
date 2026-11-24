@@ -122,7 +122,7 @@ $40.50`;
 describe('Lyft', () => {
   it('lee el día: total, propinas, viajes y primera/última hora', () => {
     const r = parseLyftText(LYFT, HOY);
-    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasTrabajo: null }] });
+    expect(r).toEqual({ ok: true, dias: [{ fecha: '2025-03-08', total: 40.5, propina: 7.5, viajes: 3, horaInicio: '09:30', horaFin: '18:10', horasTrabajo: null, horasFuente: null }] });
   });
   it('con estadísticas usa el tiempo reservado (no el conectado) e ignora sus importes', () => {
     expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].horasTrabajo).toBe(2.17);
@@ -166,5 +166,21 @@ describe('Lyft: texto real del iPhone con cortes', () => {
     const cobro = `<\n8 de marzo de 2025\nGanancias de viaje\n$30.00\nPropinas\n$7.50\nPago\n$37.50\nIniciado el sábado, 8 de marzo de 2025 a la(s)\n1:29 p.m.\n`;
     const partido = LYFT.replace('incluye Propina de $3.00 y Bono de $1.00\n6:10 p.m.', 'incluye Propina de $3.00 y Bono 6:10 p.m. ›\nde $1.00');
     expect(parseLyftText(cobro + partido, HOY).dias).toEqual(parseLyftText(LYFT, HOY).dias);
+  });
+});
+
+describe('Lyft: tiempo reservado de otra lectura', () => {
+  it('si esta lectura perdió el reservado, lo toma de otra en vez de usar el conectado', () => {
+    const sinReservado = STATS.replace(/Tiempo reservado.*\n/, 'Tiempo reservado\n');
+    const r = readCapture(LYFT + '\n' + sinReservado, [], HOY, [STATS]);
+    expect(r.plan.cambios[0]).toMatchObject({ horas: 2.17, horasFuente: 'tiempo reservado' });
+    expect(readCapture(LYFT + '\n' + sinReservado, [], HOY).plan.cambios[0]).toMatchObject({ horas: 5.5, horasFuente: 'tiempo conectado' });
+  });
+});
+
+describe('Lyft: no confundir etiquetas', () => {
+  it('«durante el tiempo reservado» seguido de «Tiempo conectado 5 h» no cuenta como reservado', () => {
+    const t = LYFT + '\nKilómetros manejados durante el\ntiempo reservado\nTiempo conectado\n\n5 h 30 min';
+    expect(readCapture(t, [], HOY).plan.cambios[0]).toMatchObject({ horas: 5.5, horasFuente: 'tiempo conectado' });
   });
 });
