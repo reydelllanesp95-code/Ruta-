@@ -35,3 +35,9 @@ Criterios (se fijan ANTES de programar; no se tocan tras ver resultados):
 
 SIN MEDIR hasta tener el texto real que copia el iPhone: el formato exacto del
 texto (los tests usan el texto leído de las capturas en los dos órdenes).
+
+Nota posterior (23-nov, tras ver resultados; el criterio original no se toca):
+el criterio 1 contaba «15 bloques + 1 ajuste». Las capturas tienen 14 bloques
+con horario + 1 ajuste de $10. Rey aclara que ese ajuste es el pago de un
+bloque que tuvo un error, así que son 15 trabajos en total. Lo que se mide
+(importes y total $935.55) cuadra al centavo.
