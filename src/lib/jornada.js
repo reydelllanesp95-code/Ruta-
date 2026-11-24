@@ -52,17 +52,33 @@ export function withJornadaMiles(routes, jornadas) {
   if (!porDia.size) return routes;
   const reparto = new Map(); // id → { millas, vehiculo }
   for (const [fecha, d] of porDia) {
-    const del = (routes || []).filter((r) => r.fecha === fecha && recibe(r));
-    if (!del.length) continue;
+    const todos = (routes || []).filter((r) => r.fecha === fecha && recibe(r));
+    if (!todos.length) continue;
+    const vehiculo = d.carros.size === 1 ? [...d.carros][0] : null;
+    // Lyft con millas de su captura: se las queda (sin pasar del odómetro);
+    // el resto del día se reparte entre los demás por horas.
+    let quedan = d.millas;
+    const conPropias = todos.filter((r) => Number(r.millasLyft) > 0);
+    for (const r of conPropias) {
+      const m = round2(Math.min(Number(r.millasLyft), quedan));
+      quedan = round2(quedan - m);
+      reparto.set(r.id, { millas: m, vehiculo });
+    }
+    const del = todos.filter((r) => !(Number(r.millasLyft) > 0));
+    if (!del.length) {
+      // Día solo de Lyft: el resto del odómetro (entre viajes, volver) también es suyo.
+      const ult = conPropias[conPropias.length - 1];
+      reparto.set(ult.id, { millas: round2(reparto.get(ult.id).millas + quedan), vehiculo });
+      continue;
+    }
     const pesos = del.map((r) => Math.max(0, Number(r.horasReales) > 0 ? Number(r.horasReales) : Number(r.horas) || 0));
     const total = pesos.reduce((s, x) => s + x, 0);
-    const vehiculo = d.carros.size === 1 ? [...d.carros][0] : null;
     let asignado = 0;
     del.forEach((r, i) => {
       // El último se lleva el resto, para que la suma cuadre al centavo.
       const m = i === del.length - 1
-        ? round2(d.millas - asignado)
-        : round2(total > 0 ? (d.millas * pesos[i]) / total : d.millas / del.length);
+        ? round2(quedan - asignado)
+        : round2(total > 0 ? (quedan * pesos[i]) / total : quedan / del.length);
       asignado = round2(asignado + m);
       reparto.set(r.id, { millas: m, vehiculo });
     });
