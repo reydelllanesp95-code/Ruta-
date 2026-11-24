@@ -103,7 +103,9 @@ export function parseFlexText(text, today = new Date()) {
     if (h.tipo === "ajuste") {
       item = { tipo: "ajuste", fecha: h.fecha, base: gr.total, propina: 0, total: gr.total };
     } else {
-      const base = gr.base ?? null;
+      // Bloque sin desglose (sin propina, p. ej. «Pagado»): todo es base.
+      const sinDesglose = gr.base == null && gr.propina == null;
+      const base = sinDesglose ? gr.total : gr.base ?? null;
       const propina = gr.propina ?? 0;
       if (base == null || round2(base + propina) !== gr.total) {
         return { ok: false, error: `El bloque del ${h.fecha} ${h.horaInicio}–${h.horaFin}: el total $${gr.total} no es base + propina. Revisa que el texto esté completo.` };

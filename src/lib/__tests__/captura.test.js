@@ -184,3 +184,14 @@ describe('Lyft: no confundir etiquetas', () => {
     expect(readCapture(t, [], HOY).plan.cambios[0]).toMatchObject({ horas: 5.5, horasFuente: 'tiempo conectado' });
   });
 });
+
+describe('Flex: bloque sin propina', () => {
+  it('sin Base/Consejos el total es la base; con Base que no cuadra sigue dando error', () => {
+    const t = 'sáb, mar 1 $75.50\n12:00 p.m. - 3:30 p.m.\nPagado\n\nvie, feb 28 $82\n9:00 a.m. - 1:00 p.m.\nPagado';
+    expect(parseFlexText(t, HOY).items).toEqual([
+      { tipo: 'bloque', fecha: '2025-03-01', horaInicio: '12:00', horaFin: '15:30', base: 75.5, propina: 0, total: 75.5 },
+      { tipo: 'bloque', fecha: '2025-02-28', horaInicio: '09:00', horaFin: '13:00', base: 82, propina: 0, total: 82 },
+    ]);
+    expect(parseFlexText('sáb, mar 1\n12:00 p.m. - 3:30 p.m.\n$75.50\nBase: $70', HOY).ok).toBe(false);
+  });
+});
