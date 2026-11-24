@@ -303,7 +303,7 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       if (!mes) continue;
       const dia = Number(m[2]);
       const fecha = `${inferYear(mes, dia, today)}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-      dias.push({ fecha, total: null, viajes: [], propina: 0, horas: [] });
+      dias.push({ fecha, total: null, viajes: [], todos: [], propina: 0, horas: [] });
     } else if (g.extra) {
       if (d && m[5].toLowerCase() === "propina") d.propina = round2(d.propina + money(m[6]));
     } else if (g.semana) {
@@ -323,7 +323,13 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       if (d.total == null) d.total = money(m[19]);
       // Al llegar al total del día se deja de sumar: lo que venga después
       // (p. ej. el total repetido detrás de las estadísticas) no es un viaje.
-      else if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(money(m[19]));
+      else {
+        const v = money(m[19]);
+        // Todos los importes (menos el total repetido): sirven para comprobar
+        // que el total no se leyó de menos.
+        if (v !== d.total) d.todos.push(v);
+        if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(v);
+      }
     } else if (g.hora && d) {
       d.horas.push(to24(m[21], m[22], m[23]));
     }
@@ -339,11 +345,17 @@ export function parseLyftText(text, today = new Date(), extra = []) {
   const avisos = [];
   for (const d of dias) {
     const suma = round2(d.viajes.reduce((s, x) => s + x, 0));
-    if (d.total == null || suma !== d.total) {
-      // Un día que no cuadra se deja fuera (sus viajes se leyeron mal o falta
-      // parte de la captura); los demás días siguen.
+    const sumaTodos = round2(d.todos.reduce((s, x) => s + x, 0));
+    if (d.total == null || suma > d.total || (suma < d.total && sumaTodos > d.total)) {
+      // Sin total, o viajes que suman más que el día: algo se leyó mal; ese
+      // día se deja fuera y los demás siguen.
       avisos.push(`Lyft ${fechaCortaISO(d.fecha)}: los viajes suman $${suma} y el día dice $${d.total ?? "?"}; no lo puse.`);
       continue;
+    }
+    if (suma < d.total) {
+      // Se perdió algún viaje al leer (letra verde, iconos), pero el total del
+      // día, grande y claro, sí: vale el total; se avisa para comprobarlo.
+      avisos.push(`Lyft ${fechaCortaISO(d.fecha)}: usé el total del día ($${d.total}); no pude comprobar viaje por viaje. Compáralo con Lyft.`);
     }
     const orden = [...d.horas].sort();
     out.push({

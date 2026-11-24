@@ -9,8 +9,9 @@ const BASE = import.meta.env.BASE_URL;
 // Dos formas de preparar la imagen; la segunda solo si la primera no cuadra.
 // Elegidas probando con capturas reales de Flex y Lyft (ver criterios).
 const INTENTOS = [
-  { umbral: 200, psm: "4" },
-  { umbral: null, psm: "11" },
+  { umbral: 200, psm: "4", escala: 2 },
+  { umbral: null, psm: "11", escala: 2 },
+  { umbral: null, psm: "11", escala: 1.5 },
 ];
 
 // Si un paso se cuelga (p. ej. el teléfono se queda sin memoria), se corta y
@@ -48,11 +49,11 @@ function getWorker() {
 
 // Gris, invertida si es modo oscuro, al doble de tamaño y (opcional) en blanco
 // y negro. Devuelve un canvas.
-async function preparar(file, umbral) {
+async function preparar(file, umbral, escala = 2) {
   const bmp = await createImageBitmap(file);
   const c = document.createElement("canvas");
-  c.width = bmp.width * 2;
-  c.height = bmp.height * 2;
+  c.width = Math.round(bmp.width * escala);
+  c.height = Math.round(bmp.height * escala);
   const ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
@@ -85,8 +86,8 @@ export async function readCaptureImages(files, routes, onProgress = () => {}) {
     await worker.setParameters({ tessedit_pageseg_mode: intento.psm });
     const textos = [];
     for (const [i, f] of [...files].entries()) {
-      onProgress(`Leyendo captura ${i + 1} de ${files.length}${n ? " (segundo intento)" : ""}…`);
-      const lienzo = await conPaso(`preparar la foto ${i + 1}`, () => preparar(f, intento.umbral));
+      onProgress(`Leyendo captura ${i + 1} de ${files.length}${n ? ` (intento ${n + 1})` : ""}…`);
+      const lienzo = await conPaso(`preparar la foto ${i + 1}`, () => preparar(f, intento.umbral, intento.escala));
       const { data } = await conTiempo(conPaso(`leer la foto ${i + 1}`, () => worker.recognize(lienzo)), 90, `leer la foto ${i + 1}`);
       textos.push(data.text);
     }
@@ -98,7 +99,7 @@ export async function readCaptureImages(files, routes, onProgress = () => {}) {
     if (r.ok && r.plataforma === "lyft" && n < INTENTOS.length - 1 && !/reservado/.test(JSON.stringify(r.plan.cambios))) {
       await worker.setParameters({ tessedit_pageseg_mode: INTENTOS[n + 1].psm });
       const otros = [];
-      for (const f of files) otros.push((await worker.recognize(await preparar(f, INTENTOS[n + 1].umbral))).data.text);
+      for (const f of files) otros.push((await worker.recognize(await preparar(f, INTENTOS[n + 1].umbral, INTENTOS[n + 1].escala))).data.text);
       r = readCapture(text, routes, undefined, [otros.join("\n")]);
     }
     // Sin avisos: listo. Con avisos se prueba la otra forma de preparar la
