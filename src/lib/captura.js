@@ -230,8 +230,12 @@ export function applyFlexPlan(routes, plan, { vehiculo } = {}) {
 const LYFT_TOKEN = new RegExp(
   [
     // «dom 22 de nov»
-    "(?<fecha>\\b(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom)[a-záéíóú]*\\.?,?\\s+(\\d{1,2})\\s+de\\s+([a-z]{3})[a-z]*)",
+    // «dom 22 de nov» (sin año: «domingo, 22 de noviembre de 2026» es la
+    // pantalla de un cobro, no la actividad del día)
+    "(?<fecha>\\b(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom)[a-záéíóú]*\\.?,?\\s+(\\d{1,2})\\s+de\\s+([a-z]{3})[a-z]*\\b(?!\\s+de\\s+\\d{4}))",
     `(?<extra>\\b(propina|bono|ajuste)\\s+de\\s+\\$\\s*${AMOUNT})`,
+    // «de $1.00» suelto: el iPhone a veces parte «Bono … de $1.00» con la hora en medio
+    `(?<suelto>\\bde\\s+\\$\\s*${AMOUNT})`,
     "(?<semana>semana del\\s+([a-z]{3})[a-z]*\\s+(\\d{1,2})\\s+al\\s+(?:([a-z]{3})[a-z]*\\s+)?(\\d{1,2}))",
     "(?<conectado>tiempo conectado(?:[^\\d]{0,80}?)(\\d+)\\s*h(?:\\s*(\\d+)\\s*min)?)",
     // Lyft siempre muestra centavos; así se ignora el «$89» de la gráfica.
@@ -262,21 +266,21 @@ export function parseLyftText(text, today = new Date()) {
     } else if (g.extra) {
       if (d && m[5].toLowerCase() === "propina") d.propina = round2(d.propina + money(m[6]));
     } else if (g.semana) {
-      const m1 = MESES[m[8]], m2 = MESES[m[10] || m[8]];
+      const m1 = MESES[m[10]], m2 = MESES[m[12] || m[10]];
       if (m1 && m2) {
         const iso = (mes, dia) => `${inferYear(mes, dia, today)}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-        semana = { desde: iso(m1, Number(m[9])), hasta: iso(m2, Number(m[11])) };
+        semana = { desde: iso(m1, Number(m[11])), hasta: iso(m2, Number(m[13])) };
       }
     } else if (g.conectado) {
-      conectado = round2(Number(m[13]) + Number(m[14] || 0) / 60);
+      conectado = round2(Number(m[15]) + Number(m[16] || 0) / 60);
     } else if (g.dinero) {
       if (!d) continue;
-      if (d.total == null) d.total = money(m[16]);
+      if (d.total == null) d.total = money(m[18]);
       // Al llegar al total del día se deja de sumar: lo que venga después
       // (p. ej. el total repetido detrás de las estadísticas) no es un viaje.
-      else if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(money(m[16]));
+      else if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(money(m[18]));
     } else if (g.hora && d) {
-      d.horas.push(to24(m[18], m[19], m[20]));
+      d.horas.push(to24(m[20], m[21], m[22]));
     }
   }
   if (!dias.length) return { ok: false, error: "No encontré el día de Lyft («dom 22 de nov»)." };

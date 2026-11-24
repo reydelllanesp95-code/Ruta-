@@ -159,3 +159,11 @@ describe('Lyft: tiempo conectado semanal', () => {
     expect(r.plan.cambios[0].horas).toBe(8.67); // 09:30–18:10, no las 5.5 de la semana
   });
 });
+
+describe('Lyft: texto real del iPhone con cortes', () => {
+  it('«Bono … de $x» partido por la hora y la pantalla de un cobro no estorban', () => {
+    const cobro = `<\n8 de marzo de 2025\nGanancias de viaje\n$30.00\nPropinas\n$7.50\nPago\n$37.50\nIniciado el sábado, 8 de marzo de 2025 a la(s)\n1:29 p.m.\n`;
+    const partido = LYFT.replace('incluye Propina de $3.00 y Bono de $1.00\n6:10 p.m.', 'incluye Propina de $3.00 y Bono 6:10 p.m. ›\nde $1.00');
+    expect(parseLyftText(cobro + partido, HOY).dias).toEqual(parseLyftText(LYFT, HOY).dias);
+  });
+});
