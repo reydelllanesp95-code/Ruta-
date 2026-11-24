@@ -76,7 +76,7 @@ export function Deducciones({ d, titulo = "Deducciones" }) {
       <Eyebrow>{titulo}</Eyebrow>
       <Row label="Gasolina" hint="(pagada, repartida por millas)" value={formatMoney(d.gasolina)} />
       {bar(d.gasolina)}
-      <Row label="Mantenimiento" hint="(estimado)" value={formatMoney(d.mantenimiento)} />
+      <Row label="Mantenimiento" hint="(pagado)" value={formatMoney(d.mantenimiento)} />
       {bar(d.mantenimiento)}
       <Row label="Comida" value={formatMoney(d.comida)} />
       <Row label="Peajes" value={formatMoney(d.peajes)} />

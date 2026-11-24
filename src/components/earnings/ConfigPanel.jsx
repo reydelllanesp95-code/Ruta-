@@ -99,13 +99,13 @@ export default function ConfigPanel({ config, onSave }) {
         Kia Sorento
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Mant $/mi" value={maint} onChange={setMaint} />
+        <Field label="Mant $/mi (limpiezas)" value={maint} onChange={setMaint} />
       </div>
       <div className="text-[11px] mt-2 mb-1" style={{ color: T.textSecondary }}>
         Hyundai Tucson
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Mant $/mi" value={tMaint} onChange={setTMaint} />
+        <Field label="Mant $/mi (limpiezas)" value={tMaint} onChange={setTMaint} />
       </div>
       <div className="text-[11px] mt-3 mb-1" style={{ color: T.textSecondary }}>
         Meta semanal (neta de lunes a domingo)

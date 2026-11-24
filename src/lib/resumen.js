@@ -1,8 +1,8 @@
 // Resúmenes por periodo (semana de pago, mes, año) y por día: lo ganado, las
-// deducciones (gasolina pagada repartida por millas, mantenimiento estimado,
+// deducciones (gasolina pagada repartida por millas, mantenimiento pagado,
 // comida y peajes apuntados) y el neto. Lógica pura; se calcula al mostrar, no se guarda.
 
-import { round2, routeEconomics, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
+import { round2, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
 import { deliveryOnly, platformOf, platformLabel, isShift } from "./platforms.js";
 import { horasJornada } from "./jornada.js";
 
@@ -109,7 +109,7 @@ export function gasPorMilla(datos, fecha) {
 // Las horas de un día con jornada son las de la jornada (salida → «paré» o
 // llegada); sin jornada, las de sus turnos.
 export function resumenRango(datos, desde, hasta) {
-  const { routes = [], meals = [], tolls = [], fuelups = [], jornadas = [], configFor } = datos;
+  const { routes = [], meals = [], tolls = [], fuelups = [], jornadas = [] } = datos;
   const horasDia = new Map();
   for (const j of jornadas) {
     if (!enRango(j.fecha, desde, hasta)) continue;
@@ -117,18 +117,16 @@ export function resumenRango(datos, desde, hasta) {
     if (h != null) horasDia.set(j.fecha, round2((horasDia.get(j.fecha) || 0) + h));
   }
   const regs = deliveryOnly(routes).filter((r) => enRango(r.fecha, desde, hasta));
-  let ganado = 0, propinas = 0, horas = 0, millas = 0, mantenimiento = 0;
+  let ganado = 0, propinas = 0, horas = 0, millas = 0;
   const apps = new Map();
   const dias = new Set();
   for (const r of regs) {
-    const eco = routeEconomics(r, configFor ? configFor(r) : undefined);
     const g = Number(r.ganancia) || 0;
     const h = Number(r.horasReales) > 0 ? Number(r.horasReales) : Number(r.horas) > 0 ? Number(r.horas) : 0;
     ganado += g;
     propinas += Number(r.propina) || 0;
     if (!horasDia.has(r.fecha)) horas += h;
     millas += Number(r.millas) || 0;
-    mantenimiento += eco.maintenance_est;
     dias.add(r.fecha);
     const k = platformOf(r);
     const a = apps.get(k) || { plataforma: k, label: platformLabel(k), ganado: 0, horas: 0, registros: 0 };
@@ -141,6 +139,8 @@ export function resumenRango(datos, desde, hasta) {
   const comida = meals.filter((m) => enRango(String(m.fecha), desde, hasta)).reduce((s, m) => s + costoReal(m.costo), 0);
   const peajes = tolls.filter((t) => enRango(String(t.fecha), desde, hasta)).reduce((s, t) => s + costoReal(t.monto), 0);
   const gasolinaPagada = pagadoEn(fuelups, desde, hasta);
+  // Mantenimiento: lo pagado en el rango (decisión de Rey, 24-nov-2026).
+  const mantenimiento = (datos.maints || []).filter((m) => enRango(String(m.fecha), desde, hasta)).reduce((s, m) => s + costoReal(m.costo), 0);
   const deducciones = {
     gasolina: gasolinaRango(datos, desde, hasta),
     mantenimiento: round2(mantenimiento),

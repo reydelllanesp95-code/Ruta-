@@ -263,7 +263,8 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   // reparto). DERIVADO, nunca se persiste.
   const vCfgs = useMemo(() => vehicleConfigs(config, fuelups), [config, fuelups]);
   const configFor = useMemo(
-    () => (r) => ({ ...vCfgs[vehicleOf(r)].config, mpg: 1, gas_price: gasPorMilla({ routes: routesVista, fuelups }, r.fecha) }),
+    // Mantenimiento: el pagado se resta en los totales, no por turno.
+    () => (r) => ({ ...vCfgs[vehicleOf(r)].config, mpg: 1, gas_price: gasPorMilla({ routes: routesVista, fuelups }, r.fecha), maintenance_cost_per_mile: 0 }),
     [vCfgs, routesVista, fuelups]
   );
   const effByVehicle = useMemo(
@@ -842,7 +843,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
               </div>
             )}
 
-            <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
+            <CleaningPanel routes={routes} locales={locales} configFor={(r) => vCfgs[vehicleOf(r)].config} onSaveLocales={saveLocales} />
 
             <button onClick={() => onTab("codigos")} className="w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-[14px]" style={{ ...btnSec, color: T.textPrimary, minHeight: 48 }}>
               <span className="flex items-center gap-2"><KeyRound size={16} /> Códigos de acceso</span>
