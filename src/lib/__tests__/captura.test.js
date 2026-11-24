@@ -149,8 +149,12 @@ describe('Lyft', () => {
     const horas = l.filter((x) => /^\d{1,2}:\d\d/.test(x));
     expect(parseLyftText([...izq, ...der, ...horas].join('\n'), HOY).dias).toEqual(parseLyftText(LYFT, HOY).dias);
   });
-  it('error si los viajes no suman el total del día', () => {
-    expect(parseLyftText(LYFT.replace('$15.25', '$15.20'), HOY).ok).toBe(false);
+  it('viajes que suman menos: vale el total del día con aviso; que suman más: no entra', () => {
+    const menos = parseLyftText(LYFT.replace('$15.25', '$15.20'), HOY);
+    expect(menos.ok).toBe(true);
+    expect(menos.dias[0].total).toBe(40.5);
+    expect(menos.avisos[0]).toMatch(/usé el total del día/);
+    expect(parseLyftText(LYFT.replace('$15.25', '$15.30'), HOY).ok).toBe(false);
   });
   it('un registro por día; actualiza en vez de duplicar; dos veces = 0 cambios', () => {
     const manual = makeShift({ plataforma: 'lyft', vehiculo: 'kia', fecha: '2025-03-08', pago: '15', millas: '20', nota: 'a mano' });
