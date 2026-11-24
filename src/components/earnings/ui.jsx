@@ -124,30 +124,43 @@ export function AppBadge({ plataforma, label }) {
   );
 }
 
-// Barra de la meta semanal: se llena hacia el tramo dorado, con marcas en
-// cada umbral, color del tramo y una frase.
-export function MetaBar({ neta, u, tramo, porLlegar = 0, compact = false }) {
-  const pct = (v) => `${Math.max(0, Math.min(100, (v / u.dorado) * 100))}%`;
+// Barra de meta por tramos (semanal o mensual): cada tramo con su color, se
+// llena en orden hasta la meta, con una marca en cada hito y una frase.
+export function MetaBar({ titulo = "Meta de la semana", neta, tramos, meta, color, texto, lineas = [], porLlegar = 0, compact = false }) {
+  const pct = (v) => Math.max(0, Math.min(100, (v / (meta || 1)) * 100));
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1.5">
-        <span className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Meta de la semana</span>
-        <span className={`gc-code ${compact ? "text-[14px]" : "text-[18px]"} font-semibold`} style={{ color: tramo.color }}>
-          {formatMoney(neta)}
+        <span className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>{titulo}</span>
+        <span className={`gc-code ${compact ? "text-[14px]" : "text-[18px]"} font-semibold`} style={{ color }}>
+          {formatMoney(neta)} <span className="text-[12px] font-normal" style={{ color: T.textFaint }}>/ {formatMoney(meta)}</span>
         </span>
       </div>
-      <div className="relative rounded-full" style={{ height: compact ? 12 : 18, backgroundColor: T.border }}>
-        <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: pct(neta), backgroundColor: tramo.color }} />
-        {[u.basico, u.invertir].map((v) => (
-          <div key={v} className="absolute top-[-3px] bottom-[-3px]" style={{ left: pct(v), width: 2, backgroundColor: T.textSecondary }} aria-hidden="true" />
+      <div className="relative rounded-full overflow-hidden" style={{ height: compact ? 12 : 18, backgroundColor: T.border }} role="img" aria-label={`${titulo}: ${formatMoney(neta)} de ${formatMoney(meta)}`}>
+        {tramos.map((t) => (
+          <React.Fragment key={t.id}>
+            <div className="absolute top-0 h-full" style={{ left: `${pct(t.desde)}%`, width: `${pct(t.hasta) - pct(t.desde)}%`, backgroundColor: t.color, opacity: 0.18 }} />
+            <div className="absolute top-0 h-full" style={{ left: `${pct(t.desde)}%`, width: `${pct(Math.min(Math.max(neta, t.desde), t.hasta)) - pct(t.desde)}%`, backgroundColor: t.color }} />
+          </React.Fragment>
+        ))}
+        {tramos.slice(0, -1).map((t) => (
+          <div key={t.id + "m"} className="absolute top-0 h-full" style={{ left: `${pct(t.hasta)}%`, width: 2, backgroundColor: T.bg || "#000" }} aria-hidden="true" />
         ))}
       </div>
-      <div className="relative h-4 mt-0.5 text-[10.5px] gc-code" style={{ color: T.textFaint }}>
-        {[u.basico, u.invertir, u.dorado].map((v) => (
-          <span key={v} className="absolute -translate-x-1/2" style={{ left: pct(v) === "100%" ? "calc(100% - 14px)" : pct(v) }}>${v}</span>
-        ))}
-      </div>
-      <div className={`${compact ? "text-[13px]" : "text-[14px]"} mt-1`} style={{ color: T.textPrimary }}>{tramo.texto}</div>
+      {!compact && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px]" style={{ color: T.textFaint }}>
+          {tramos.map((t) => (
+            <span key={t.id} className="flex items-center gap-1">
+              <span className="inline-block rounded-full" style={{ width: 7, height: 7, backgroundColor: t.color }} />
+              {t.label} <span className="gc-code">{formatMoney(t.hasta)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {texto && <div className={`${compact ? "text-[13px]" : "text-[14px]"} mt-1.5`} style={{ color: T.textPrimary }}>{texto}</div>}
+      {lineas.filter(Boolean).map((l, i) => (
+        <div key={i} className="text-[12.5px] mt-0.5" style={{ color: T.textSecondary }}>{l}</div>
+      ))}
       {porLlegar > 0 && (
         <div className="text-[12px] mt-0.5" style={{ color: T.revisar }}>
           {porLlegar} propina(s) de Flex por llegar (no cuentan hasta que las subas).

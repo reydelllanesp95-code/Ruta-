@@ -144,5 +144,8 @@ describe('meta v2: resto', () => {
     expect(p.porTarjeta.find((t) => t.id === 'b').restante).toBe(0);
     expect(p.discover.objetivo).toBe('2025-09-09');
     expect(planDeuda({ tarjetas: [], pagos: [] }, u, '2025-03-17').textoPlan).toMatch(/Apunta tus tarjetas/);
+    // Tarjetas sin saldo apuntado → fase 1 y consejo genérico.
+    const vacias = { tarjetas: deudas.tarjetas.map((t) => ({ ...t, saldo: 0 })), pagos: [] };
+    expect(estadoSemana(1000, U, { saldoFondo: 0, deudas: vacias }).consejo).toMatch(/todo a la tarjeta con mayor interés/);
   });
 });

@@ -84,6 +84,8 @@ export function restanteTarjeta(t, pagos = []) {
 
 export function faseDeuda(deudas) {
   const { tarjetas = [], pagos = [] } = deudas || {};
+  // Sin saldos apuntados aún: se trata como fase 1.
+  if (!tarjetas.some((t) => pos(t.saldo) > 0)) return 1;
   const f1 = tarjetas.filter((t) => Number(t.fase) === 1);
   if (!f1.length) return tarjetas.some((t) => Number(t.fase) === 2) ? 2 : 1;
   return f1.some((t) => restanteTarjeta(t, pagos) > 0) ? 1 : 2;
