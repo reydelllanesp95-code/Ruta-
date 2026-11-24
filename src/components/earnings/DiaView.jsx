@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2 } from "../../lib/earnings.js";
-import { resumenDia, addDays, nombreDia } from "../../lib/resumen.js";
+import { resumenDia, addDays, nombreDia, detalleGastos } from "../../lib/resumen.js";
 import { jornadaMiles } from "../../lib/jornada.js";
 import { vehicleLabel } from "../../lib/vehicles.js";
 import { Card, Eyebrow, NetoHero, Deducciones } from "./ui.jsx";
@@ -91,7 +91,7 @@ export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, rende
         </Card>
       )}
 
-      {r.registros > 0 && <Deducciones d={r.deducciones} titulo="Deducciones del día" />}
+      {r.registros > 0 && <Deducciones d={r.deducciones} detalle={detalleGastos(datos, fecha, fecha)} titulo="Deducciones del día" />}
 
       <div>
         <div className="gc-eyebrow text-[11px] uppercase px-1 py-1.5" style={{ color: T.textFaint }}>Lo que hiciste</div>

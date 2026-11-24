@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2, todayISO } from "../../lib/earnings.js";
-import { periodo, moverPeriodo, resumenPeriodo, resumenDia, promedioDia } from "../../lib/resumen.js";
+import { periodo, moverPeriodo, resumenPeriodo, resumenDia, promedioDia, detalleGastos, porDia, nombreDia } from "../../lib/resumen.js";
 import { platformOf, platformLabel, isCleaning } from "../../lib/platforms.js";
 import { Card, Eyebrow, NetoHero, Deducciones, Segmented, AppBadge, APP_COLOR } from "./ui.jsx";
 import JornadaHoras from "./JornadaHoras.jsx";
@@ -21,6 +21,7 @@ const TIPOS = [
 // comparación con el periodo anterior, últimos periodos y reparto por app.
 export default function ResumenView({ datos, startDow, onSaveJornada, meta = null }) {
   const [editando, setEditando] = useState(null);
+  const [verDetalle, setVerDetalle] = useState(false);
   const [p, setP] = useState(() => periodo("semana", todayISO(), startDow));
   const esDia = p.tipo === "día";
   const { actual: r, anterior: a, serie } = useMemo(() => {
@@ -34,6 +35,8 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
   const esSemana = p.tipo === "semana";
   const hoy = todayISO();
   const mv = meta;
+  const detalle = useMemo(() => detalleGastos(datos, p.desde, p.hasta), [datos, p]);
+  const dias = useMemo(() => (esSemana && verDetalle ? porDia(datos, p.desde, p.hasta) : []), [datos, p, esSemana, verDetalle]);
   const sem = useMemo(() => {
     if (!esSemana || !mv) return null;
     const n = netaMeta(datos, p.desde, p.hasta, hoy);
@@ -65,7 +68,32 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
       </div>
 
       {sem && (
-        <MetaSemanaCard estado={sem.estado} plan={mv.plan} porLlegar={sem.n.porLlegar} hist={sem.hist} desdeSel={p.desde}>
+        <MetaSemanaCard
+          estado={sem.estado}
+          plan={mv.plan}
+          porLlegar={sem.n.porLlegar}
+          hist={sem.hist}
+          desdeSel={p.desde}
+          onTap={() => setVerDetalle((v) => !v)}
+          tapLabel={verDetalle ? "Ocultar detalle" : "Ver ganado y gastos por día"}
+          onSemana={(desde) => setP(periodo("semana", desde, startDow))}
+        >
+          {verDetalle && (
+            <div className="mt-2 rounded-lg p-2.5" style={{ backgroundColor: T.surfaceRaised }}>
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-[11px] pb-1" style={{ color: T.textFaint }}>
+                <span>Día</span><span className="text-right">Ganado</span><span className="text-right">Gasolina</span><span className="text-right">Otros</span>
+              </div>
+              {dias.map((x) => (
+                <div key={x.fecha} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 text-[13px] py-0.5 gc-code" style={{ color: x.ganado || x.gastos || x.gasolina ? T.textPrimary : T.textFaint }}>
+                  <span style={{ fontFamily: "inherit" }}>{nombreDia(x.fecha).split(" ")[0].slice(0, 3)} {x.fecha.slice(8)}</span>
+                  <span className="text-right">{formatMoney(x.ganado)}</span>
+                  <span className="text-right" style={{ color: "#FF7A72" }}>{x.gasolina ? `−${formatMoney(x.gasolina)}` : "—"}</span>
+                  <span className="text-right" style={{ color: "#FF7A72" }}>{x.gastos ? `−${formatMoney(x.gastos)}` : "—"}</span>
+                </div>
+              ))}
+              <div className="text-[11.5px] mt-1" style={{ color: T.textFaint }}>«Otros» = mantenimiento, comida y peajes. Toca cada gasto abajo, en Deducciones, para ver la lista.</div>
+            </div>
+          )}
           <div className="text-[12px] mt-2" style={{ color: T.textFaint }}>
             Neta = {formatMoney(sem.n.ganado)} ganado − {formatMoney(sem.n.gastos.gasolina)} gasolina pagada − {formatMoney(sem.n.gastos.mantenimiento)} mantenimiento − {formatMoney(sem.n.gastos.comida)} comida − {formatMoney(sem.n.gastos.peajes)} peajes.
           </div>
@@ -93,7 +121,7 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
         <>
           <NetoHero r={r} netoLabel={esDia ? "Neto del día" : "Neto"} />
           {esDia && <LineaDeTiempo lista={dia.lista} jornadas={(datos.jornadas || []).filter((j) => j.fecha === p.desde)} />}
-          <Deducciones d={r.deducciones} titulo={esDia ? "Deducciones del día" : "Deducciones"} />
+          <Deducciones d={r.deducciones} detalle={detalle} titulo={esDia ? "Deducciones del día" : "Deducciones"} />
         </>
       )}
 
@@ -125,11 +153,11 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
             {serie.map((s, i) => {
               const ult = i === serie.length - 1;
               return (
-                <div key={s.desde} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+                <button type="button" key={s.desde} onClick={() => setP(periodo(p.tipo, s.desde, startDow))} aria-label={`Ver ${s.label}`} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
                   <span className="gc-code text-[11px]" style={{ color: ult ? T.textPrimary : T.textSecondary }}>{Math.round(s.neto) ? `$${Math.round(s.neto)}` : "—"}</span>
                   <div className="w-full rounded-t-md" style={{ height: Math.max(3, Math.round((Math.abs(s.neto) / maxSerie) * 70)), backgroundColor: s.neto < 0 ? T.red : ult ? T.ok : "#3A3A3D" }} />
                   <span className="text-[10.5px] text-center leading-tight" style={{ color: ult ? T.textPrimary : T.textFaint }}>{s.label}</span>
-                </div>
+                </button>
               );
             })}
           </div>

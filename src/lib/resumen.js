@@ -5,6 +5,7 @@
 import { round2, payWeekStart, payWeekEnd, fechaCorta, monthLabel } from "./earnings.js";
 import { deliveryOnly, platformOf, platformLabel, isShift } from "./platforms.js";
 import { horasJornada } from "./jornada.js";
+import { MAINT_TYPE_LABELS, MEAL_TYPE_LABELS } from "./constants.js";
 
 function iso(d) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -233,4 +234,37 @@ export function promedioDia(datos, fecha, semanas = 4) {
     netoHora: r.horas > 0 ? round2(r.neto / r.horas) : null,
     label: n ? `tu día promedio (${n} días)` : "sin días anteriores",
   };
+}
+
+// Detalle de gastos de un rango para poder abrir cada categoría: cada gasto
+// con fecha, monto y nota. La gasolina muestra lo pagado en las semanas
+// (lunes→domingo) que tocan el rango, porque se reparte por millas.
+export function detalleGastos(datos, desde, hasta) {
+  const { fuelups = [], maints = [], meals = [], tolls = [] } = datos;
+  const gDesde = periodo("semana", desde, SEMANA_GAS).desde;
+  const gHasta = periodo("semana", hasta, SEMANA_GAS).hasta;
+  const lista = (xs, campo, nota, a = desde, b = hasta) =>
+    xs
+      .filter((x) => enRango(String(x.fecha), a, b) && costoReal(x[campo]) > 0)
+      .map((x) => ({ fecha: String(x.fecha), monto: round2(costoReal(x[campo])), nota: nota(x) }))
+      .sort((x, y) => x.fecha.localeCompare(y.fecha));
+  return {
+    gasolina: lista(fuelups, "costo", (x) => (x.vehiculo === "tucson" ? "Tucson" : x.vehiculo === "kia" ? "Kia" : ""), gDesde, gHasta),
+    gasolinaSemanas: { desde: gDesde, hasta: gHasta },
+    mantenimiento: lista(maints, "costo", (x) => MAINT_TYPE_LABELS[x.tipo] || x.tipo || ""),
+    comida: lista(meals, "costo", (x) => x.nota || MEAL_TYPE_LABELS[x.tipo] || ""),
+    peajes: lista(tolls, "monto", (x) => x.lugar || (x.agencia === "epass" ? "E-PASS" : x.agencia === "otro" ? "Peaje" : "SunPass")),
+  };
+}
+
+// Por día del rango: ganado de reparto y gastos apuntados ese día (sin la
+// gasolina, que va por semana).
+export function porDia(datos, desde, hasta) {
+  const out = [];
+  for (let d = desde; d <= hasta; d = addDays(d, 1)) {
+    const r = resumenRango({ ...datos, fuelups: [] }, d, d);
+    const gastos = round2(r.deducciones.mantenimiento + r.deducciones.comida + r.deducciones.peajes);
+    out.push({ fecha: d, ganado: r.ganado, gastos, gasolina: gasolinaRango(datos, d, d) });
+  }
+  return out;
 }

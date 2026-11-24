@@ -106,3 +106,24 @@ describe('día en Resumen', () => {
     expect(p.horas).toBe(2);
   });
 });
+
+describe('detalle de gastos (criterio 5 de docs/criterios-pausas-gastos-hoy.md)', () => {
+  it('lista cada gasto por categoría y la gasolina de las semanas lun–dom del rango', async () => {
+    const { detalleGastos, porDia } = await import('../resumen.js');
+    const d = {
+      routes: [t('2025-03-04', 'flex', 100, 0, 60)],
+      fuelups: [{ fecha: '2025-03-02', costo: 40, vehiculo: 'kia' }, { fecha: '2025-03-06', costo: 50, vehiculo: 'kia' }],
+      maints: [{ fecha: '2025-03-05', costo: 30, tipo: 'oil' }],
+      meals: [{ fecha: '2025-03-04', costo: 12, tipo: 'almuerzo' }],
+      tolls: [{ fecha: '2025-03-04', monto: 2.5, agencia: 'sunpass', lugar: '' }],
+    };
+    const g = detalleGastos(d, '2025-03-04', '2025-03-04');
+    expect(g.gasolina).toEqual([{ fecha: '2025-03-06', monto: 50, nota: 'Kia' }]); // semana 3–9
+    expect(g.mantenimiento).toEqual([]);
+    expect(g.comida).toEqual([{ fecha: '2025-03-04', monto: 12, nota: 'Almuerzo' }]);
+    expect(g.peajes).toEqual([{ fecha: '2025-03-04', monto: 2.5, nota: 'SunPass' }]);
+    const dias = porDia(d, '2025-03-03', '2025-03-09');
+    expect(dias.find((x) => x.fecha === '2025-03-04')).toEqual({ fecha: '2025-03-04', ganado: 100, gastos: 14.5, gasolina: 50 });
+    expect(dias.find((x) => x.fecha === '2025-03-05').gastos).toBe(30);
+  });
+});
