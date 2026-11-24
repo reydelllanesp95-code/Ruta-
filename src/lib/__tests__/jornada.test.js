@@ -68,3 +68,21 @@ describe('gasolina solo con el $', () => {
     expect(realMpg([...fu, makeFuelup({ fecha: '2025-01-20', costo: 30 })])).toBe(null);
   });
 });
+
+describe('editar horas de la jornada', () => {
+  it('pone, cambia y quita «Paré»; valida orden y formato; no toca odómetros', async () => {
+    const { editarHorasJornada, horasJornada } = await import('../jornada.js');
+    const j = { id: 'j', fecha: '2025-03-08', vehiculo: 'kia', horaSalida: '06:00', odoSalida: 100, horaLlegada: '18:00', odoLlegada: 170 };
+    const a = editarHorasJornada(j, { horaSalida: '06:00', horaParada: '14:00', horaLlegada: '18:00' });
+    expect(a.ok).toBe(true);
+    expect(horasJornada(a.jornada)).toBe(8);
+    expect(a.jornada).toMatchObject({ odoSalida: 100, odoLlegada: 170 });
+    expect(editarHorasJornada(a.jornada, { horaSalida: '06:00', horaParada: '', horaLlegada: '18:00' }).jornada.horaParada).toBeUndefined();
+    expect(editarHorasJornada(j, { horaSalida: '06:00', horaParada: '19:00', horaLlegada: '18:00' }).ok).toBe(false);
+    expect(editarHorasJornada(j, { horaSalida: '6am', horaLlegada: '18:00' }).ok).toBe(false);
+    const noche = { ...j, horaSalida: '20:00', horaLlegada: '02:00' };
+    expect(editarHorasJornada(noche, { horaSalida: '20:00', horaParada: '01:00', horaLlegada: '02:00' }).ok).toBe(true);
+    const abierta = { ...j, horaLlegada: '', odoLlegada: null };
+    expect(editarHorasJornada(abierta, { horaSalida: '05:30', horaParada: '13:00' }).jornada).toMatchObject({ horaSalida: '05:30', horaParada: '13:00' });
+  });
+});

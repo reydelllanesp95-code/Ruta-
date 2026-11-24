@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2 } from "../../lib/earnings.js";
@@ -6,12 +6,14 @@ import { resumenDia, addDays, nombreDia } from "../../lib/resumen.js";
 import { jornadaMiles } from "../../lib/jornada.js";
 import { vehicleLabel } from "../../lib/vehicles.js";
 import { Card, Eyebrow, NetoHero, Deducciones } from "./ui.jsx";
+import JornadaHoras from "./JornadaHoras.jsx";
 
 export { nombreDia };
 
 // Un día por dentro: neto, deducciones, jornada y cada trabajo (editable con
 // `renderRegistro`, que pinta la tarjeta de siempre).
-export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, renderRegistro }) {
+export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, renderRegistro, onSaveJornada }) {
+  const [editandoId, setEditandoId] = useState(null);
   const r = useMemo(() => resumenDia(datos, fecha), [datos, fecha]);
   const delDia = (jornadas || []).filter((j) => j.fecha === fecha);
   const apps = r.porApp;
@@ -43,10 +45,23 @@ export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, rende
         <Card>
           <Eyebrow>Jornada</Eyebrow>
           {delDia.map((j) => (
-            <div key={j.id} className={`grid gap-2 mb-1 ${j.horaParada ? "grid-cols-3" : "grid-cols-2"}`}>
-              <Caja titulo="Salí" hora={j.horaSalida} odo={j.odoSalida} />
-              {j.horaParada && <Caja titulo="Paré" hora={j.horaParada} />}
-              <Caja titulo="Llegué" hora={j.horaLlegada || "—"} odo={j.odoLlegada} />
+            <div key={j.id} className="mb-1">
+              {editandoId === j.id ? (
+                <JornadaHoras jornada={j} onSave={onSaveJornada} onClose={() => setEditandoId(null)} />
+              ) : (
+                <>
+                  <div className={`grid gap-2 ${j.horaParada ? "grid-cols-3" : "grid-cols-2"}`}>
+                    <Caja titulo="Salí" hora={j.horaSalida} odo={j.odoSalida} />
+                    {j.horaParada && <Caja titulo="Paré" hora={j.horaParada} />}
+                    <Caja titulo="Llegué" hora={j.horaLlegada || "—"} odo={j.odoLlegada} />
+                  </div>
+                  {onSaveJornada && (
+                    <button type="button" onClick={() => setEditandoId(j.id)} className="text-[12.5px] underline mt-1" style={{ color: T.textSecondary, minHeight: 32 }}>
+                      Editar horas
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           ))}
           <div className="text-[12.5px] mt-1" style={{ color: T.textSecondary }}>

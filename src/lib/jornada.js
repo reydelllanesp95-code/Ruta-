@@ -18,7 +18,11 @@ export function closeJornada(j, { hora, odo }) {
   if (!o.ok || !(o.value > j.odoSalida)) {
     return { ok: false, error: `La llegada tiene que ser mayor que la salida (${j.odoSalida}).` };
   }
-  return { ok: true, jornada: { ...j, horaLlegada: hora, odoLlegada: o.value } };
+  const out = { ...j, horaLlegada: hora, odoLlegada: o.value };
+  // Un «Paré» que quedó después de la llegada (horas editadas) no vale.
+  const desde = (h) => (minutos(h) - minutos(j.horaSalida) + 1440) % 1440;
+  if (out.horaParada && minutos(hora) != null && desde(out.horaParada) > desde(hora)) delete out.horaParada;
+  return { ok: true, jornada: out };
 }
 
 export function openJornada(jornadas) {
@@ -93,4 +97,23 @@ export function horasJornada(j) {
   const b = minutos((j && j.horaParada) || (j && j.horaLlegada));
   if (a == null || b == null || a === b) return null;
   return round2(((b - a + 1440) % 1440) / 60);
+}
+
+// Corregir las horas a mano (p. ej. se olvidó tocar «Paré»). Vacío en
+// horaParada la quita. No toca odómetros.
+export function editarHorasJornada(j, { horaSalida, horaParada = "", horaLlegada = "" }) {
+  const ok = (h) => minutos(h) != null && minutos(h) < 1440;
+  if (!ok(horaSalida)) return { ok: false, error: "La hora de salida no es válida." };
+  if (horaParada && !ok(horaParada)) return { ok: false, error: "La hora en que paraste no es válida." };
+  const cerrada = j.odoLlegada != null;
+  if (cerrada && !ok(horaLlegada)) return { ok: false, error: "La hora de llegada no es válida." };
+  const desde = (h) => (minutos(h) - minutos(horaSalida) + 1440) % 1440;
+  if (horaParada && cerrada && !(desde(horaParada) > 0 && desde(horaParada) <= desde(horaLlegada))) {
+    return { ok: false, error: "«Paré» tiene que estar entre la salida y la llegada." };
+  }
+  if (horaParada && desde(horaParada) === 0) return { ok: false, error: "«Paré» no puede ser la misma hora que la salida." };
+  const out = { ...j, horaSalida, ...(cerrada ? { horaLlegada } : {}) };
+  if (horaParada) out.horaParada = horaParada;
+  else delete out.horaParada;
+  return { ok: true, jornada: out };
 }
