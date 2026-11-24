@@ -106,3 +106,13 @@ function triggerDownload(blob, filename) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// Descarga una tabla (filas de celdas) como CSV, p. ej. el resumen del año.
+export function downloadTabla(filas, filename) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const text = filas.map((f) => f.map(esc).join(",")).join("\n") + "\n";
+  triggerDownload(new Blob([text], { type: "text/csv" }), filename);
+}

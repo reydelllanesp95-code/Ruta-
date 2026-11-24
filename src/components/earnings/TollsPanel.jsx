@@ -11,9 +11,9 @@ import {
 } from "../../lib/tolls.js";
 
 // Panel de peajes (SunPass / E-PASS): a mano o importando el CSV de la cuenta.
-// El total se resta del neto de la semana/mes (ver StatsCards).
-export default function TollsPanel({ tolls, weekStartDow = 6, onAdd, onImport, onDelete }) {
-  const [open, setOpen] = useState(false);
+// El total se resta del neto de la semana/mes (ver Resumen).
+export default function TollsPanel({ defaultOpen = false, tolls, weekStartDow = 6, onAdd, onImport, onDelete }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [fecha, setFecha] = useState(todayISO());
   const [monto, setMonto] = useState("");
   const [agencia, setAgencia] = useState("sunpass");

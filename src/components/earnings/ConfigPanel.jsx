@@ -12,6 +12,7 @@ export default function ConfigPanel({ config, onSave }) {
   const [maint, setMaint] = useState(String(config.maintenance_cost_per_mile));
   const [tMpg, setTMpg] = useState(String(config.tucson_mpg));
   const [tMaint, setTMaint] = useState(String(config.tucson_maintenance_cost_per_mile));
+  const [meta, setMeta] = useState(String(config.meta_semanal || ""));
   const [error, setError] = useState("");
 
   function start() {
@@ -20,6 +21,7 @@ export default function ConfigPanel({ config, onSave }) {
     setMaint(String(config.maintenance_cost_per_mile));
     setTMpg(String(config.tucson_mpg));
     setTMaint(String(config.tucson_maintenance_cost_per_mile));
+    setMeta(String(config.meta_semanal || ""));
     setError("");
     setOpen(true);
   }
@@ -35,6 +37,8 @@ export default function ConfigPanel({ config, onSave }) {
     const tmt = validateNonNegative(tMaint, "El mantenimiento por milla del Tucson");
     if (!Number.isFinite(tm) || tm <= 0) return setError("El MPG del Tucson debe ser mayor que 0.");
     if (!tmt.ok) return setError(tmt.error);
+    const mm = validateNonNegative(meta, "La meta semanal");
+    if (!mm.ok) return setError(mm.error);
     onSave({
       ...config,
       gas_price: g.value,
@@ -42,6 +46,7 @@ export default function ConfigPanel({ config, onSave }) {
       maintenance_cost_per_mile: mt.value,
       tucson_mpg: tm,
       tucson_maintenance_cost_per_mile: tmt.value,
+      meta_semanal: mm.value,
     });
     setOpen(false);
   }
@@ -74,6 +79,7 @@ export default function ConfigPanel({ config, onSave }) {
       </div>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Gas $/gal" value={gas} onChange={setGas} />
+        <Field label="Meta semana $" value={meta} onChange={setMeta} />
       </div>
       <div className="text-[11px] mt-2 mb-1" style={{ color: T.textSecondary }}>
         Kia Sorento
@@ -102,8 +108,8 @@ export default function ConfigPanel({ config, onSave }) {
         <Save size={14} /> Guardar
       </button>
       <div className="text-[11px] mt-2" style={{ color: T.textFaint }}>
-        El MPG asumido se usa hasta que haya 2 llenados de ese carro; luego se usa
-        el real. El MPG del Tucson (25) es una suposición: ajústalo si sabes el tuyo.
+        Con la gasolina apuntada solo en $, se usa el MPG asumido de cada carro:
+        ajústalo si sabes el tuyo. Meta semanal vacía o 0 = sin meta.
       </div>
     </div>
   );

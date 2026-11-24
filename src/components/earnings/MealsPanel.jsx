@@ -6,7 +6,7 @@ import { MEAL_TYPES, MEAL_TYPE_LABELS } from "../../lib/constants.js";
 import { validateMeal, mealSpendByPeriod, mealSpendForKey } from "../../lib/meals.js";
 
 // Panel de gastos de comida. RESTA del neto semanal/mensual (no del por-ruta).
-export default function MealsPanel({
+export default function MealsPanel({ defaultOpen = false,
   meals,
   weekStartDow = 6,
   semanaLabel,
@@ -18,7 +18,7 @@ export default function MealsPanel({
   onAdd,
   onDelete,
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [fecha, setFecha] = useState(todayISO());
   const [tipo, setTipo] = useState("almuerzo");
   const [costo, setCosto] = useState("");
