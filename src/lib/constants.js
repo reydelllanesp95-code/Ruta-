@@ -5,7 +5,7 @@ export const TARIFA_DEFAULT = 1.7;
 
 // Versión del esquema de datos persistido. Subir al cambiar la forma de los
 // datos y agregar la migración correspondiente en storage.js. [Aud 12]
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2; // 2: meta semanal v2 (24-nov-2026)
 
 // Claves de localStorage. Cada una es un blob independiente. NO duplicar datos.
 export const KEY_CODES = "gate_codes_v3"; // directorio de códigos (existente)
@@ -18,6 +18,9 @@ export const KEY_TOLLS = "ruta_tolls_v1"; // peajes (SunPass / E-PASS)
 export const KEY_LOCALES = "ruta_locales_v1"; // locales de limpieza (facturación y fees de Corvus)
 export const KEY_META = "ruta_meta_semanas_v1"; // semanas de la meta marcadas «Hecho»
 export const KEY_JORNADAS = "ruta_jornadas_v1"; // odómetro al salir y al llegar a casa
+export const KEY_DEUDA = "ruta_deuda_v1"; // tarjetas, pagos («Pagué») y fin de promo de Discover
+export const KEY_FONDO = "ruta_fondo_v1"; // usos del fondo colchón
+export const KEY_AVISOS = "ruta_meta_avisos_v1"; // hitos ya avisados por semana
 export const KEY_SHIFT_DRAFT = "ruta_turno_en_curso_v1"; // borrador del turno que se está apuntando
 
 // Tipos de mantenimiento (reutilizable en UI y validación).
@@ -65,13 +68,40 @@ export const DEFAULT_CONFIG = {
   tucson_mpg: TUCSON_MPG_DEFAULT,
   tucson_maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT,
   pay_week_start_day: PAY_WEEK_START_DEFAULT,
-  // Meta semanal (deuda + inversión): umbrales de la neta y reparto.
-  meta_basico: 250,
-  meta_invertir: 700,
-  meta_dorado: 900,
-  meta_deuda: 350,
-  meta_inversion: 100,
-  meta_trading_pct: 5,
+  // Meta semanal v2: colchón → deuda → inversión → meta ($900).
+  meta_colchon: 80,
+  meta_deuda_semana: 680,
+  meta_extra: 40,
+  meta_inversiones: [
+    { nombre: "VOO", monto: 40 },
+    { nombre: "SCHD", monto: 15 },
+    { nombre: "NVDA", monto: 10 },
+    { nombre: "BTC", monto: 15 },
+    { nombre: "ETH", monto: 13 },
+    { nombre: "altcoins", monto: 7 },
+  ],
+  fondo_tope: 500,
+  fondo_inicial: 0,
+  fondo_desde: "2026-11-23",
+  plan_inicio: "2026-11-23",
+  plan_meses: 5,
+};
+
+// Claves de la meta v1 que la v2 sustituye (meta_deuda era $350 y ahora la
+// deuda semanal es otra cosa: se borran en la migración 1 → 2).
+export const META_V1_KEYS = ["meta_basico", "meta_invertir", "meta_dorado", "meta_deuda", "meta_inversion", "meta_trading_pct"];
+
+// Tarjetas del plan de deuda (saldo y APR los pone Rey en Ajustes).
+export const DEUDA_DEFAULT = {
+  tarjetas: [
+    { id: "chase-prime", nombre: "Chase Prime", fase: 1, saldo: 0, apr: 0 },
+    { id: "capital-one", nombre: "Capital One", fase: 1, saldo: 0, apr: 0 },
+    { id: "chase", nombre: "Chase", fase: 1, saldo: 0, apr: 0 },
+    { id: "pnc", nombre: "PNC", fase: 1, saldo: 0, apr: 0 },
+    { id: "discover", nombre: "Discover", fase: 2, saldo: 0, apr: 0 },
+  ],
+  pagos: [],
+  promoFin: "",
 };
 
 // Fees de Corvus sobre lo facturado (royalty 10% + administración 10% + seguro
