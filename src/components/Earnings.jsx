@@ -5,10 +5,11 @@ import {
   DownloadCloud,
   UploadCloud,
   FileSpreadsheet,
-  TrendingUp,
   Plus,
   RefreshCw,
-  ClipboardPaste,
+  Images,
+  Clock,
+  KeyRound,
 } from "lucide-react";
 import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
@@ -28,30 +29,34 @@ import {
   totalsForKey,
   payWeekLabel,
   monthLabel,
+  todayISO,
+  fechaCorta,
+  formatMoney,
+  round2,
 } from "../lib/earnings.js";
 import { loadConfig, saveConfig } from "../lib/config.js";
-import { makeFuelup, fuelSpendForKey } from "../lib/fuel.js";
+import { makeFuelup } from "../lib/fuel.js";
 import { vehicleConfigs, vehicleOf, vehicleLabel, VEHICLE_IDS, VEHICLES } from "../lib/vehicles.js";
 import { makeMaint } from "../lib/maintenance.js";
-import { makeMeal, mealSpendForKey } from "../lib/meals.js";
-import { makeToll, tollSpendForKey } from "../lib/tolls.js";
+import { makeMeal } from "../lib/meals.js";
+import { makeToll } from "../lib/tolls.js";
 import TollsPanel from "./earnings/TollsPanel.jsx";
-import { downloadBackup, restoreBackup, downloadPlantillaTurnos } from "../lib/backup.js";
-import StatsCards from "./earnings/StatsCards.jsx";
+import { downloadBackup, restoreBackup, downloadPlantillaTurnos, downloadTabla } from "../lib/backup.js";
 import ConfigPanel from "./earnings/ConfigPanel.jsx";
 import FuelupsPanel from "./earnings/FuelupsPanel.jsx";
 import MaintenancePanel from "./earnings/MaintenancePanel.jsx";
 import MealsPanel from "./earnings/MealsPanel.jsx";
-import WeeklySummary from "./earnings/WeeklySummary.jsx";
-import MonthlySummary from "./earnings/MonthlySummary.jsx";
 import RouteCard from "./earnings/RouteCard.jsx";
 import ImportDialog from "./earnings/ImportDialog.jsx";
 import ShiftForm from "./earnings/ShiftForm.jsx";
 import ShiftCard from "./earnings/ShiftCard.jsx";
 import PasteCapture from "./earnings/PasteCapture.jsx";
 import JornadaCard from "./earnings/JornadaCard.jsx";
+import ResumenView from "./earnings/ResumenView.jsx";
+import DiaView, { nombreDia } from "./earnings/DiaView.jsx";
+import { Card, Eyebrow, Row, Mini, Segmented } from "./earnings/ui.jsx";
+import { periodo, resumenRango, propinasPendientes, filasAño } from "../lib/resumen.js";
 import { withJornadaMiles } from "../lib/jornada.js";
-import PlatformSummary from "./earnings/PlatformSummary.jsx";
 import {
   makeShift,
   shiftUpdate,
@@ -60,9 +65,10 @@ import {
   isShiftsCSVHeader,
   parseShiftRows,
   deliveryOnly,
+  isCleaning,
 } from "../lib/platforms.js";
 
-export default function Earnings() {
+export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   const [routes, setRoutes] = useState([]);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [fuelups, setFuelups] = useState([]);
@@ -78,6 +84,9 @@ export default function Earnings() {
   // Si quedó un turno a medias (la app se cerró), el formulario abre solo.
   const [addingShift, setAddingShift] = useState(() => draftHasData(loadDraft()));
   const [pegando, setPegando] = useState(false);
+  const [diaSel, setDiaSel] = useState(null);
+  const [semanasVisibles, setSemanasVisibles] = useState(4);
+  const [gastoTipo, setGastoTipo] = useState("gasolina");
   const [hayBorrador, setHayBorrador] = useState(() => draftHasData(loadDraft()));
 
   const fileRef = useRef(null);
@@ -380,6 +389,32 @@ export default function Earnings() {
     }
   }
 
+  const hoy = todayISO();
+  const startDow = config.pay_week_start_day;
+  const datos = useMemo(
+    () => ({ routes: routesVista, meals, tolls, fuelups, maints, configFor }),
+    [routesVista, meals, tolls, fuelups, maints, configFor]
+  );
+  const hoyR = useMemo(() => resumenRango(datos, hoy, hoy), [datos, hoy]);
+  const semanaP = periodo("semana", hoy, startDow);
+  const semanaR = useMemo(() => resumenRango(datos, semanaP.desde, semanaP.hasta), [datos, semanaP.desde, semanaP.hasta]);
+  const pendientes = useMemo(() => propinasPendientes(routesVista, hoy), [routesVista, hoy]);
+  const año = Number(hoy.slice(0, 4));
+  const añoR = useMemo(() => filasAño(datos, año), [datos, año]);
+
+  // Turnos agrupados por semana de pago y por día (más reciente primero).
+  const semanas = useMemo(() => {
+    const map = new Map();
+    for (const r of routesOrdenadas) {
+      const k = periodo("semana", r.fecha, startDow).desde;
+      if (!map.has(k)) map.set(k, new Map());
+      const dias = map.get(k);
+      if (!dias.has(r.fecha)) dias.set(r.fecha, []);
+      dias.get(r.fecha).push(r);
+    }
+    return [...map.entries()].map(([desde, dias]) => ({ desde, dias: [...dias.entries()] }));
+  }, [routesOrdenadas, startDow]);
+
   if (!loaded) {
     return (
       <div
@@ -392,6 +427,70 @@ export default function Earnings() {
     );
   }
 
+  function renderRegistro(r) {
+    return isShift(r) ? (
+      <ShiftCard
+        key={r.id}
+        route={r}
+        config={configFor(r)}
+        locales={locales}
+        onSave={(input) => editShift(r.id, input)}
+        onDelete={deleteRoute}
+      />
+    ) : (
+      <RouteCard
+        key={r.id}
+        route={r}
+        config={configFor(r)}
+        onSave={(fields) => updateRoute(r.id, fields)}
+        onDelete={deleteRoute}
+      />
+    );
+  }
+
+  // Gasto apuntado de un tipo en [desde, hasta].
+  function gastoEn(tipo, desde, hasta) {
+    const [lista, campo] = { gasolina: [fuelups, "costo"], mant: [maints, "costo"], comida: [meals, "costo"], peajes: [tolls, "monto"] }[tipo];
+    return round2(
+      lista
+        .filter((x) => String(x.fecha) >= desde && String(x.fecha) <= hasta)
+        .reduce((s, x) => s + (Number(x[campo]) > 0 ? Number(x[campo]) : 0), 0)
+    );
+  }
+
+  const btnSec = { backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` };
+  const TITULOS = { hoy: nombreDia(hoy), resumen: "Resumen", turnos: "Turnos", gastos: "Gastos", mas: "Más" };
+
+  const capturas = pegando ? (
+    <PasteCapture
+      routes={routes}
+      vehiculo={lastVehicle}
+      onApply={(next, n) => {
+        persist(next);
+        setPegando(false);
+        setMsg({ tipo: "ok", texto: `Captura aplicada: ${n} cambio(s).` });
+      }}
+      onCancel={() => setPegando(false)}
+    />
+  ) : (
+    <button
+      onClick={() => setPegando(true)}
+      className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-medium"
+      style={{ backgroundColor: T.surfaceRaised, color: T.textPrimary, border: `1px solid ${T.border}`, minHeight: 52 }}
+    >
+      <Images size={17} /> Elegir capturas (Flex o Lyft)
+    </button>
+  );
+
+  const aviso = msg && (
+    <div
+      className="text-[13px] rounded-lg px-3 py-2"
+      style={{ backgroundColor: msg.tipo === "error" ? T.redDim : T.okDim, color: msg.tipo === "error" ? T.red : T.ok }}
+    >
+      {msg.texto}
+    </div>
+  );
+
   return (
     <div className="font-sans" style={{ backgroundColor: T.bg, color: T.textPrimary }}>
       <style>{`
@@ -400,198 +499,268 @@ export default function Earnings() {
         .gc-code { font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace; }
       `}</style>
 
-      <div
-        className="sticky top-0 z-10 px-4 pt-4 pb-3"
-        style={{ backgroundColor: T.bg, borderBottom: `1px solid ${T.border}` }}
-      >
-        <div className="flex items-center gap-2.5 mb-1">
-          <button
-            onClick={updateAndReload}
-            className="order-last ml-auto flex flex-col items-end text-[11px]"
-            style={{ color: T.textFaint }}
-            aria-label="Buscar actualización y recargar"
-          >
-            <span className="flex items-center gap-1" style={{ color: T.textSecondary }}>
-              <RefreshCw size={14} /> Actualizar
-            </span>
-            {BUILD_TIME && (
-              <span className="gc-code text-[9.5px]">
-                v {new Date(BUILD_TIME).toLocaleString("es-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
-          </button>
-          <div
-            className="flex items-center justify-center rounded-md"
-            style={{ width: 30, height: 30, backgroundColor: "#000", border: `1px solid ${T.border}` }}
-          >
-            <TrendingUp size={16} style={{ color: T.red }} />
+      <div className="sticky top-0 z-10 px-4 pt-4 pb-3 flex items-end justify-between" style={{ backgroundColor: T.bg, borderBottom: `1px solid ${T.border}` }}>
+        <div className="leading-tight">
+          <div className="gc-eyebrow text-[10.5px] uppercase" style={{ color: T.textFaint }}>
+            {saveState === "saving" ? "guardando…" : saveState === "saved" ? "guardado ✓" : "Ruta"}
           </div>
-          <div className="leading-tight">
-            <div className="gc-wordmark text-[15px]" style={{ color: T.textPrimary }}>
-              Ganancias
-            </div>
-            <div className="gc-eyebrow text-[10px] uppercase" style={{ color: T.textFaint }}>
-              {routes.length} ruta(s) ·{" "}
-              {saveState === "saving" ? "guardando…" : saveState === "saved" ? "guardado ✓" : "Flex · Spark"}
-            </div>
-          </div>
+          <div className="gc-wordmark text-[26px]">{TITULOS[tab] || "Ruta"}</div>
         </div>
+        <button onClick={updateAndReload} className="flex flex-col items-end text-[11px]" style={{ color: T.textFaint, minHeight: 44 }} aria-label="Buscar actualización y recargar">
+          <span className="flex items-center gap-1" style={{ color: T.textSecondary }}>
+            <RefreshCw size={14} /> Actualizar
+          </span>
+          {BUILD_TIME && (
+            <span className="gc-code text-[9.5px]">
+              v {new Date(BUILD_TIME).toLocaleString("es-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </button>
       </div>
 
-      <div className="px-4 pb-28 pt-3 space-y-4">
-        <StatsCards
-          semana={semanaInfo.totals}
-          mes={mesInfo.totals}
-          gastosSemana={
-            mealSpendForKey(meals, semanaInfo.totals.key, config.pay_week_start_day) +
-            tollSpendForKey(tolls, semanaInfo.totals.key, config.pay_week_start_day)
-          }
-          gastosMes={
-            mealSpendForKey(meals, mesInfo.totals.key, config.pay_week_start_day) +
-            tollSpendForKey(tolls, mesInfo.totals.key, config.pay_week_start_day)
-          }
-          gasolinaSemana={fuelSpendForKey(fuelups, semanaInfo.totals.key, config.pay_week_start_day)}
-          gasolinaMes={fuelSpendForKey(fuelups, mesInfo.totals.key, config.pay_week_start_day)}
-          semanaLabel={semanaInfo.label}
-          mesLabel={mesInfo.label}
-        />
+      <div className="px-4 pb-28 pt-3 space-y-3">
+        {aviso}
 
-        <JornadaCard
-          jornadas={jornadas}
-          lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
-          defaultVehicle={lastVehicle}
-          onSave={persistJornadas}
-        />
-
-        {addingShift ? (
-          <div className="rounded-xl p-3" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
-            <div className="gc-eyebrow text-[11px] uppercase mb-2" style={{ color: T.textFaint }}>
-              Turno en curso
-            </div>
-            <ShiftForm
-              persistDraft
-              locales={locales}
-              lastOdoByVehicle={Object.fromEntries(
-                VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints, jornadas })])
-              )}
-              defaultVehicle={lastVehicle}
-              onSubmit={addShift}
-              onCancel={() => {
-                setHayBorrador(draftHasData(loadDraft()));
-                setAddingShift(false);
-              }}
-            />
-          </div>
-        ) : (
-          <button
-            onClick={() => setAddingShift(true)}
-            className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-[15px] font-medium"
-            style={{ backgroundColor: T.red, color: "#fff" }}
-          >
-            <Plus size={17} /> {hayBorrador ? "Seguir turno en curso" : "Añadir turno"}
-          </button>
-        )}
-
-        {pegando ? (
-          <PasteCapture
-            routes={routes}
-            vehiculo={lastVehicle}
-            onApply={(next, n) => {
-              persist(next);
-              setPegando(false);
-              setMsg({ tipo: "ok", texto: `Captura aplicada: ${n} cambio(s).` });
-            }}
-            onCancel={() => setPegando(false)}
-          />
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setPegando(true)}
-              className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
-              style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
-            >
-              <ClipboardPaste size={15} /> Pegar captura
-            </button>
-            <button
-              onClick={onExport}
-              className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
-              style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
-            >
-              <DownloadCloud size={15} /> Exportar respaldo
-            </button>
-          </div>
-        )}
-
-        <PlatformSummary items={agg.porGrupo} />
-
-        <ConfigPanel config={config} onSave={onSaveConfig} />
-
-        {/* Indicador visible de qué MPG se está usando por carro. [ajuste 1] */}
-        <div className="text-[12px] px-1 -mt-1 space-y-0.5">
-          {VEHICLE_IDS.map((id) => {
-            const e = effByVehicle[id];
-            return (
-              <div key={id} style={{ color: e.source === "real" ? T.ok : T.textFaint }}>
-                {vehicleLabel(id)}: {e.source === "real" ? `MPG real ${e.real}` : `MPG asumido ${e.mpg}`}
+        {tab === "hoy" && (
+          <>
+            {pendientes.length > 0 && (
+              <div className="rounded-2xl px-3.5 py-3 flex items-center gap-3" style={{ backgroundColor: T.revisarDim, border: "1px solid #5A4720" }}>
+                <Clock size={20} style={{ color: T.revisar }} />
+                <div className="flex-1">
+                  <div className="text-[14px] font-semibold" style={{ color: "#F7C77A" }}>
+                    {pendientes.length} bloque(s) de Flex sin propina
+                  </div>
+                  <div className="text-[12.5px]" style={{ color: "#E4C489" }}>
+                    {pendientes.slice(0, 2).map((r) => `${fechaCorta(r.fecha)} ${r.horaInicio}`).join(" · ")}
+                  </div>
+                </div>
+                <button onClick={() => setPegando(true)} className="rounded-xl px-3 text-[13px] font-semibold" style={{ backgroundColor: T.revisar, color: "#1A1305", minHeight: 44 }}>
+                  Subir captura
+                </button>
               </div>
-            );
-          })}
-        </div>
+            )}
 
-        <FuelupsPanel
-          fuelups={fuelups}
-          effByVehicle={effByVehicle}
-          weekStartDow={config.pay_week_start_day}
-          onAdd={addFuelup}
-          onDelete={deleteFuelup}
-        />
+            <JornadaCard
+              jornadas={jornadas}
+              lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
+              defaultVehicle={lastVehicle}
+              onSave={persistJornadas}
+            />
 
-        <MaintenancePanel
-          maints={maints}
-          onAdd={addMaint}
-          onDelete={deleteMaint}
-          onApplyCostPerMile={applyMaintCostPerMile}
-        />
+            {config.meta_semanal > 0 && (
+              <Card>
+                <Eyebrow right={<span className="gc-code">{formatMoney(semanaR.ganado)} / {formatMoney(config.meta_semanal)}</span>}>Meta de la semana</Eyebrow>
+                <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: T.border }}>
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round((semanaR.ganado / config.meta_semanal) * 100))}%`, backgroundColor: T.ok }} />
+                </div>
+                <div className="text-[12.5px] mt-2" style={{ color: T.textSecondary }}>
+                  {semanaR.ganado >= config.meta_semanal
+                    ? "¡Meta cumplida!"
+                    : `Te faltan ${formatMoney(config.meta_semanal - semanaR.ganado)} · la semana cierra el ${fechaCorta(semanaP.hasta)}`}
+                </div>
+              </Card>
+            )}
 
-        <MealsPanel
-          meals={meals}
-          weekStartDow={config.pay_week_start_day}
-          semanaLabel={semanaInfo.label}
-          semanaNet={semanaInfo.totals.net_profit}
-          semanaKey={semanaInfo.totals.key}
-          mesLabel={mesInfo.label}
-          mesNet={mesInfo.totals.net_profit}
-          mesKey={mesInfo.totals.key}
-          onAdd={addMeal}
-          onDelete={deleteMeal}
-        />
+            <div className="grid grid-cols-3 gap-2">
+              <Card className="!p-3"><Mini label="Ganado hoy" value={formatMoney(hoyR.ganado)} /></Card>
+              <Card className="!p-3"><Mini label="Horas" value={hoyR.horas ? `${hoyR.horas} h` : "—"} /></Card>
+              <Card className="!p-3"><Mini label="Millas" value={hoyR.millas ? `${Math.round(hoyR.millas)} mi` : "—"} /></Card>
+            </div>
+            {hoyR.registros === 0 && (
+              <div className="text-[12.5px] px-1" style={{ color: T.textFaint }}>
+                Lo de hoy aparece cuando subas las capturas (mañana, con las propinas).
+              </div>
+            )}
 
-        <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
+            {capturas}
+          </>
+        )}
 
-        <TollsPanel
-          tolls={tolls}
-          weekStartDow={config.pay_week_start_day}
-          onAdd={addToll}
-          onImport={importTolls}
-          onDelete={deleteToll}
-        />
+        {tab === "resumen" && <ResumenView datos={datos} startDow={startDow} />}
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
-            style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
-          >
-            <Upload size={15} /> Importar CSV
-          </button>
-          <button
-            onClick={downloadPlantillaTurnos}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
-            style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
-          >
-            <FileSpreadsheet size={15} /> Plantilla CSV
-          </button>
-        </div>
+        {tab === "turnos" && diaSel && (
+          <DiaView
+            datos={datos}
+            fecha={diaSel}
+            jornadas={jornadas}
+            onFecha={setDiaSel}
+            onBack={() => setDiaSel(null)}
+            renderRegistro={renderRegistro}
+          />
+        )}
+
+        {tab === "turnos" && !diaSel && (
+          <>
+            {addingShift ? (
+              <Card>
+                <Eyebrow>Turno a mano</Eyebrow>
+                <ShiftForm
+                  persistDraft
+                  locales={locales}
+                  lastOdoByVehicle={Object.fromEntries(
+                    VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints, jornadas })])
+                  )}
+                  defaultVehicle={lastVehicle}
+                  onSubmit={addShift}
+                  onCancel={() => {
+                    setHayBorrador(draftHasData(loadDraft()));
+                    setAddingShift(false);
+                  }}
+                />
+              </Card>
+            ) : (
+              <button onClick={() => setAddingShift(true)} className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-[14px]" style={{ ...btnSec, color: T.textPrimary, minHeight: 44 }}>
+                <Plus size={16} /> {hayBorrador ? "Seguir turno a mano" : "Añadir turno a mano"}
+              </button>
+            )}
+
+            {semanas.length === 0 && (
+              <div className="text-center py-8 text-[13.5px]" style={{ color: T.textFaint }}>
+                Aún no hay registros. Sube capturas desde Hoy.
+              </div>
+            )}
+            {semanas.slice(0, semanasVisibles).map((w) => {
+              const tot = resumenRango(datos, w.desde, periodo("semana", w.desde, startDow).hasta);
+              return (
+                <div key={w.desde} className="space-y-2">
+                  <div className="flex items-baseline justify-between px-1 pt-2">
+                    <span className="gc-eyebrow text-[11.5px] uppercase" style={{ color: T.textFaint }}>
+                      Semana {periodo("semana", w.desde, startDow).label}
+                    </span>
+                    <span className="gc-code text-[13px]" style={{ color: T.textSecondary }}>{formatMoney(tot.ganado)}</span>
+                  </div>
+                  {w.dias.map(([fecha, regs]) => {
+                    const total = regs.filter((r) => !isCleaning(r)).reduce((s, r) => s + (Number(r.ganancia) || 0), 0);
+                    return (
+                      <div key={fecha} className="space-y-2">
+                        <button
+                          onClick={() => setDiaSel(fecha)}
+                          className="w-full flex items-center justify-between rounded-xl px-3.5 py-3"
+                          style={{ backgroundColor: T.surfaceRaised, border: `1px solid #3A3A3D`, minHeight: 48 }}
+                        >
+                          <span className="text-[14px] font-semibold">{nombreDia(fecha)}</span>
+                          <span className="gc-code text-[14px]" style={{ color: T.ok }}>{formatMoney(total)} ›</span>
+                        </button>
+                        {regs.map((r) => renderRegistro(r))}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {semanas.length > semanasVisibles && (
+              <button onClick={() => setSemanasVisibles((n) => n + 4)} className="w-full rounded-xl py-3 text-[13.5px]" style={{ ...btnSec, minHeight: 44 }}>
+                Ver semanas anteriores
+              </button>
+            )}
+          </>
+        )}
+
+        {tab === "gastos" && (
+          <>
+            <Segmented
+              label="Tipo de gasto"
+              value={gastoTipo}
+              onChange={setGastoTipo}
+              options={[
+                { id: "gasolina", label: "Gasolina" },
+                { id: "mant", label: "Manten." },
+                { id: "comida", label: "Comida" },
+                { id: "peajes", label: "Peajes" },
+              ]}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Card className="!p-3"><Mini label={`Semana ${semanaP.label}`} value={formatMoney(gastoEn(gastoTipo, semanaP.desde, semanaP.hasta))} /></Card>
+              <Card className="!p-3"><Mini label={monthLabel(hoy.slice(0, 7))} value={formatMoney(gastoEn(gastoTipo, `${hoy.slice(0, 7)}-01`, `${hoy.slice(0, 7)}-31`))} /></Card>
+            </div>
+            {gastoTipo === "gasolina" && (
+              <FuelupsPanel defaultOpen fuelups={fuelups} effByVehicle={effByVehicle} weekStartDow={startDow} onAdd={addFuelup} onDelete={deleteFuelup} />
+            )}
+            {gastoTipo === "mant" && (
+              <MaintenancePanel defaultOpen maints={maints} onAdd={addMaint} onDelete={deleteMaint} onApplyCostPerMile={applyMaintCostPerMile} />
+            )}
+            {gastoTipo === "comida" && (
+              <MealsPanel
+                defaultOpen
+                meals={meals}
+                weekStartDow={startDow}
+                semanaLabel={semanaInfo.label}
+                semanaNet={semanaInfo.totals.net_profit}
+                semanaKey={semanaInfo.totals.key}
+                mesLabel={mesInfo.label}
+                mesNet={mesInfo.totals.net_profit}
+                mesKey={mesInfo.totals.key}
+                onAdd={addMeal}
+                onDelete={deleteMeal}
+              />
+            )}
+            {gastoTipo === "peajes" && (
+              <TollsPanel defaultOpen tolls={tolls} weekStartDow={startDow} onAdd={addToll} onImport={importTolls} onDelete={deleteToll} />
+            )}
+          </>
+        )}
+
+        {tab === "mas" && (
+          <>
+            <Card>
+              <Eyebrow right="para tu contador">Año {año}</Eyebrow>
+              {añoR.resumen.porApp.map((a) => (
+                <Row key={a.plataforma} label={`Ingresos ${a.label}`} value={formatMoney(a.ganado)} />
+              ))}
+              <Row label="Millas de trabajo" value={`${Math.round(añoR.resumen.millas).toLocaleString("en-US")} mi`} />
+              <Row label="Gasolina pagada" value={formatMoney(añoR.resumen.gasolinaPagada)} />
+              <Row label="Mantenimiento pagado" value={formatMoney(añoR.mantenimientoPagado)} />
+              <Row label="Comida + peajes" value={formatMoney(añoR.resumen.deducciones.comida + añoR.resumen.deducciones.peajes)} />
+              <button onClick={() => downloadTabla(añoR.filas, `ruta-resumen-${año}.csv`)} className="w-full mt-2 rounded-xl py-2.5 text-[14px] font-semibold" style={{ backgroundColor: T.red, color: "#fff", minHeight: 44 }}>
+                Descargar resumen (CSV)
+              </button>
+              <div className="text-[12px] mt-2" style={{ color: T.textFaint }}>
+                No soy contador: es un resumen de tus datos, no un cálculo de impuestos.
+              </div>
+            </Card>
+
+            <ConfigPanel config={config} onSave={onSaveConfig} />
+            <div className="text-[12px] px-1 -mt-1 space-y-0.5">
+              {VEHICLE_IDS.map((id) => {
+                const e = effByVehicle[id];
+                return (
+                  <div key={id} style={{ color: e.source === "real" ? T.ok : T.textFaint }}>
+                    {vehicleLabel(id)}: {e.source === "real" ? `MPG real ${e.real}` : `MPG asumido ${e.mpg}`}
+                  </div>
+                );
+              })}
+            </div>
+
+            <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
+
+            <button onClick={() => onTab("codigos")} className="w-full flex items-center justify-between rounded-xl px-3.5 py-3 text-[14px]" style={{ ...btnSec, color: T.textPrimary, minHeight: 48 }}>
+              <span className="flex items-center gap-2"><KeyRound size={16} /> Códigos de acceso</span>
+              <span style={{ color: T.textFaint }}>›</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => fileRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]" style={btnSec}>
+                <Upload size={15} /> Importar CSV
+              </button>
+              <button onClick={downloadPlantillaTurnos} className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]" style={btnSec}>
+                <FileSpreadsheet size={15} /> Plantilla CSV
+              </button>
+            </div>
+
+            <Card>
+              <Eyebrow>Respaldo</Eyebrow>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={onExport} className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]" style={{ ...btnSec, color: T.textPrimary, minHeight: 44 }}>
+                  <DownloadCloud size={15} /> Exportar
+                </button>
+                <button onClick={() => backupRef.current?.click()} className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]" style={{ ...btnSec, color: T.red, minHeight: 44 }}>
+                  <UploadCloud size={15} /> Importar…
+                </button>
+              </div>
+              <div className="text-[12px] mt-2" style={{ color: T.textFaint }}>Importar reemplaza todo lo que hay en el teléfono.</div>
+            </Card>
+          </>
+        )}
 
         <input
           ref={fileRef}
@@ -601,72 +770,6 @@ export default function Earnings() {
           className="hidden"
         />
         <input ref={backupRef} type="file" accept=".json" onChange={onImportBackup} className="hidden" />
-
-        {msg && (
-          <div
-            className="text-[13px] rounded-lg px-3 py-2"
-            style={{
-              backgroundColor: msg.tipo === "error" ? T.redDim : T.okDim,
-              color: msg.tipo === "error" ? T.red : T.ok,
-            }}
-          >
-            {msg.texto}
-          </div>
-        )}
-
-        <WeeklySummary items={agg.porSemana} />
-        <MonthlySummary items={agg.porMes} />
-
-        <div>
-          <div className="gc-eyebrow text-[11px] uppercase px-1 py-1.5" style={{ color: T.textFaint }}>
-            Turnos y rutas
-          </div>
-          {routesOrdenadas.length === 0 ? (
-            <div className="text-center py-8 text-[13.5px]" style={{ color: T.textFaint }}>
-              Aún no hay registros. Toca "Añadir turno" para apuntar tu primer bloque.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {routesOrdenadas.map((r) =>
-                isShift(r) ? (
-                  <ShiftCard
-                    key={r.id}
-                    route={r}
-                    config={configFor(r)}
-                    locales={locales}
-                    onSave={(input) => editShift(r.id, input)}
-                    onDelete={deleteRoute}
-                  />
-                ) : (
-                <RouteCard
-                  key={r.id}
-                  route={r}
-                  config={configFor(r)}
-                  onSave={(fields) => updateRoute(r.id, fields)}
-                  onDelete={deleteRoute}
-                />
-                )
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <button
-            onClick={onExport}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
-            style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
-          >
-            <DownloadCloud size={15} /> Exportar respaldo
-          </button>
-          <button
-            onClick={() => backupRef.current?.click()}
-            className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
-            style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
-          >
-            <UploadCloud size={15} /> Importar respaldo
-          </button>
-        </div>
       </div>
 
       {previews && (

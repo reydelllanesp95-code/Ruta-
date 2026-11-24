@@ -62,6 +62,7 @@ export const DEFAULT_CONFIG = {
   tucson_mpg: TUCSON_MPG_DEFAULT,
   tucson_maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT,
   pay_week_start_day: PAY_WEEK_START_DEFAULT,
+  meta_semanal: 0, // 0 = sin meta
 };
 
 // Fees de Corvus sobre lo facturado (royalty 10% + administración 10% + seguro

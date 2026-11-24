@@ -118,13 +118,13 @@ export function resumenPeriodo(datos, p, startDow = 6, n = 4) {
   return { actual, anterior, serie };
 }
 
-// El día: resumen + sus registros (todos, incluidas limpiezas) en orden.
+// El día: resumen + `lista` con sus registros (todos, incluidas limpiezas) en orden.
 export function resumenDia(datos, fecha) {
   const r = resumenRango(datos, fecha, fecha);
   const registros = (datos.routes || [])
     .filter((x) => x.fecha === fecha)
     .sort((a, b) => String(a.horaInicio || "99").localeCompare(String(b.horaInicio || "99")));
-  return { ...r, fecha, registros };
+  return { ...r, fecha, lista: registros };
 }
 
 // Bloques de Flex de los últimos `dias` días (sin hoy) con propina $0: la

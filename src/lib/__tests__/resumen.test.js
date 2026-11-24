@@ -54,7 +54,7 @@ describe('resumenRango', () => {
   it('día: registros en orden, incluida la limpieza', () => {
     const d = resumenDia(datos, '2025-03-08');
     expect(d.ganado).toBe(50);
-    expect(d.registros).toHaveLength(2);
+    expect(d.lista).toHaveLength(2);
   });
 });
 

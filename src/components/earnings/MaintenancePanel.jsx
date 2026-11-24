@@ -9,8 +9,8 @@ import VehiclePicker from "./VehiclePicker.jsx";
 
 // Panel de mantenimiento: histórico + insights informativos. NO cambia el
 // cálculo por ruta (eso usa el maintenance_cost_per_mile de la config).
-export default function MaintenancePanel({ maints: allMaints, onAdd, onDelete, onApplyCostPerMile }) {
-  const [open, setOpen] = useState(false);
+export default function MaintenancePanel({ defaultOpen = false, maints: allMaints, onAdd, onDelete, onApplyCostPerMile }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [vehiculo, setVehiculo] = useState("kia");
   const maints = forVehicle(allMaints, vehiculo); // nunca mezclar odómetros de dos carros
   const [fecha, setFecha] = useState(todayISO());

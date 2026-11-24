@@ -13,8 +13,8 @@ import VehiclePicker from "./VehiclePicker.jsx";
 
 // Panel de llenados de gasolina (fuel-ups): MPG real + insights de gasto/frecuencia.
 // `effByVehicle` = { kia: effInfo, tucson: effInfo }. Todo se ve y valida por vehículo.
-export default function FuelupsPanel({ fuelups: allFuelups, effByVehicle, weekStartDow = 6, onAdd, onDelete }) {
-  const [open, setOpen] = useState(false);
+export default function FuelupsPanel({ defaultOpen = false, fuelups: allFuelups, effByVehicle, weekStartDow = 6, onAdd, onDelete }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [vehiculo, setVehiculo] = useState("kia");
   const fuelups = forVehicle(allFuelups, vehiculo);
   const effInfo = effByVehicle[vehiculo];

@@ -39,6 +39,7 @@ export function sanitizeConfig(raw) {
       DEFAULT_CONFIG.tucson_maintenance_cost_per_mile
     ),
     pay_week_start_day: weekday(c.pay_week_start_day, DEFAULT_CONFIG.pay_week_start_day),
+    meta_semanal: nonNeg(c.meta_semanal, DEFAULT_CONFIG.meta_semanal),
   };
 }
 
