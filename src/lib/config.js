@@ -38,8 +38,15 @@ export function sanitizeConfig(raw) {
       c.tucson_maintenance_cost_per_mile,
       DEFAULT_CONFIG.tucson_maintenance_cost_per_mile
     ),
-    pay_week_start_day: weekday(c.pay_week_start_day, DEFAULT_CONFIG.pay_week_start_day),
-    meta_semanal: nonNeg(c.meta_semanal, DEFAULT_CONFIG.meta_semanal),
+    // 6 (sábado) era el valor de antes por defecto, nunca elegido a mano: pasa
+    // a la semana lunes→domingo que eligió Rey.
+    pay_week_start_day: Number(c.pay_week_start_day) === 6 ? DEFAULT_CONFIG.pay_week_start_day : weekday(c.pay_week_start_day, DEFAULT_CONFIG.pay_week_start_day),
+    meta_basico: nonNeg(c.meta_basico, DEFAULT_CONFIG.meta_basico),
+    meta_invertir: nonNeg(c.meta_invertir, DEFAULT_CONFIG.meta_invertir),
+    meta_dorado: nonNeg(c.meta_dorado, DEFAULT_CONFIG.meta_dorado),
+    meta_deuda: nonNeg(c.meta_deuda, DEFAULT_CONFIG.meta_deuda),
+    meta_inversion: nonNeg(c.meta_inversion, DEFAULT_CONFIG.meta_inversion),
+    meta_trading_pct: nonNeg(c.meta_trading_pct, DEFAULT_CONFIG.meta_trading_pct),
   };
 }
 

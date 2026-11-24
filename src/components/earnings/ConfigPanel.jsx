@@ -12,7 +12,16 @@ export default function ConfigPanel({ config, onSave }) {
   const [maint, setMaint] = useState(String(config.maintenance_cost_per_mile));
   const [tMpg, setTMpg] = useState(String(config.tucson_mpg));
   const [tMaint, setTMaint] = useState(String(config.tucson_maintenance_cost_per_mile));
-  const [meta, setMeta] = useState(String(config.meta_semanal || ""));
+  const META = [
+    ["meta_basico", "Básico $"],
+    ["meta_invertir", "Invertir desde $"],
+    ["meta_dorado", "Dorado desde $"],
+    ["meta_deuda", "A deuda $"],
+    ["meta_inversion", "A inversión $"],
+    ["meta_trading_pct", "Trading %"],
+  ];
+  const metaDe = (c) => Object.fromEntries(META.map(([k]) => [k, String(c[k] ?? "")]));
+  const [meta, setMeta] = useState(() => metaDe(config));
   const [error, setError] = useState("");
 
   function start() {
@@ -21,7 +30,7 @@ export default function ConfigPanel({ config, onSave }) {
     setMaint(String(config.maintenance_cost_per_mile));
     setTMpg(String(config.tucson_mpg));
     setTMaint(String(config.tucson_maintenance_cost_per_mile));
-    setMeta(String(config.meta_semanal || ""));
+    setMeta(metaDe(config));
     setError("");
     setOpen(true);
   }
@@ -37,8 +46,16 @@ export default function ConfigPanel({ config, onSave }) {
     const tmt = validateNonNegative(tMaint, "El mantenimiento por milla del Tucson");
     if (!Number.isFinite(tm) || tm <= 0) return setError("El MPG del Tucson debe ser mayor que 0.");
     if (!tmt.ok) return setError(tmt.error);
-    const mm = validateNonNegative(meta, "La meta semanal");
-    if (!mm.ok) return setError(mm.error);
+    const metaVals = {};
+    for (const [k, label] of META) {
+      const v = validateNonNegative(meta[k], label.replace(/ [$%]$/, ""));
+      if (!v.ok) return setError(v.error);
+      metaVals[k] = v.value;
+    }
+    if (!(metaVals.meta_basico <= metaVals.meta_invertir && metaVals.meta_invertir <= metaVals.meta_dorado)) {
+      return setError("Los tramos deben ir de menor a mayor: básico ≤ invertir ≤ dorado.");
+    }
+    if (metaVals.meta_trading_pct > 100) return setError("Trading % no puede pasar de 100.");
     onSave({
       ...config,
       gas_price: g.value,
@@ -46,7 +63,7 @@ export default function ConfigPanel({ config, onSave }) {
       maintenance_cost_per_mile: mt.value,
       tucson_mpg: tm,
       tucson_maintenance_cost_per_mile: tmt.value,
-      meta_semanal: mm.value,
+      ...metaVals,
     });
     setOpen(false);
   }
@@ -79,7 +96,6 @@ export default function ConfigPanel({ config, onSave }) {
       </div>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Gas $/gal" value={gas} onChange={setGas} />
-        <Field label="Meta semana $" value={meta} onChange={setMeta} />
       </div>
       <div className="text-[11px] mt-2 mb-1" style={{ color: T.textSecondary }}>
         Kia Sorento
@@ -95,6 +111,14 @@ export default function ConfigPanel({ config, onSave }) {
         <Field label="MPG asumido" value={tMpg} onChange={setTMpg} />
         <Field label="Mant $/mi" value={tMaint} onChange={setTMaint} />
       </div>
+      <div className="text-[11px] mt-3 mb-1" style={{ color: T.textSecondary }}>
+        Meta semanal (neta de lunes a domingo)
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {META.map(([k, label]) => (
+          <Field key={k} label={label} value={meta[k]} onChange={(v) => setMeta((m) => ({ ...m, [k]: v }))} />
+        ))}
+      </div>
       {error && (
         <div className="text-[12px] mt-2" style={{ color: T.red }}>
           {error}
@@ -109,7 +133,7 @@ export default function ConfigPanel({ config, onSave }) {
       </button>
       <div className="text-[11px] mt-2" style={{ color: T.textFaint }}>
         Con la gasolina apuntada solo en $, se usa el MPG asumido de cada carro:
-        ajústalo si sabes el tuyo. Meta semanal vacía o 0 = sin meta.
+        ajústalo si sabes el tuyo.
       </div>
     </div>
   );

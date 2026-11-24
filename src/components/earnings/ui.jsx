@@ -128,3 +128,36 @@ export function AppBadge({ plataforma, label }) {
     </span>
   );
 }
+
+// Barra de la meta semanal: se llena hacia el tramo dorado, con marcas en
+// cada umbral, color del tramo y una frase.
+export function MetaBar({ neta, u, tramo, porLlegar = 0, compact = false }) {
+  const pct = (v) => `${Math.max(0, Math.min(100, (v / u.dorado) * 100))}%`;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <span className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Meta de la semana</span>
+        <span className={`gc-code ${compact ? "text-[14px]" : "text-[18px]"} font-semibold`} style={{ color: tramo.color }}>
+          {formatMoney(neta)}
+        </span>
+      </div>
+      <div className="relative rounded-full" style={{ height: compact ? 12 : 18, backgroundColor: T.border }}>
+        <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: pct(neta), backgroundColor: tramo.color }} />
+        {[u.basico, u.invertir].map((v) => (
+          <div key={v} className="absolute top-[-3px] bottom-[-3px]" style={{ left: pct(v), width: 2, backgroundColor: T.textSecondary }} aria-hidden="true" />
+        ))}
+      </div>
+      <div className="relative h-4 mt-0.5 text-[10.5px] gc-code" style={{ color: T.textFaint }}>
+        {[u.basico, u.invertir, u.dorado].map((v) => (
+          <span key={v} className="absolute -translate-x-1/2" style={{ left: pct(v) === "100%" ? "calc(100% - 14px)" : pct(v) }}>${v}</span>
+        ))}
+      </div>
+      <div className={`${compact ? "text-[13px]" : "text-[14px]"} mt-1`} style={{ color: T.textPrimary }}>{tramo.texto}</div>
+      {porLlegar > 0 && (
+        <div className="text-[12px] mt-0.5" style={{ color: T.revisar }}>
+          {porLlegar} propina(s) de Flex por llegar (no cuentan hasta que las subas).
+        </div>
+      )}
+    </div>
+  );
+}

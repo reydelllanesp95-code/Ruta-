@@ -15,7 +15,7 @@ import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
 import { lastOdometer } from "../lib/odometer.js";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, KEY_META, DEFAULT_CONFIG } from "../lib/constants.js";
 import CleaningPanel from "./earnings/CleaningPanel.jsx";
 import { sanitizeLocal } from "../lib/cleaning.js";
 import * as storage from "../lib/storage.js";
@@ -54,8 +54,10 @@ import PasteCapture from "./earnings/PasteCapture.jsx";
 import JornadaCard from "./earnings/JornadaCard.jsx";
 import ResumenView from "./earnings/ResumenView.jsx";
 import DiaView, { nombreDia } from "./earnings/DiaView.jsx";
-import { Card, Eyebrow, Row, Mini, Segmented } from "./earnings/ui.jsx";
-import { periodo, resumenRango, propinasPendientes, filasAño } from "../lib/resumen.js";
+import { Card, Eyebrow, Row, Mini, Segmented, MetaBar } from "./earnings/ui.jsx";
+import SemanaPasada from "./earnings/SemanaPasada.jsx";
+import { netaMeta, tramoMeta, umbralesDe } from "../lib/meta.js";
+import { periodo, resumenRango, propinasPendientes, filasAño, addDays } from "../lib/resumen.js";
 import { withJornadaMiles } from "../lib/jornada.js";
 import {
   makeShift,
@@ -77,6 +79,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   const [tolls, setTolls] = useState([]);
   const [locales, setLocales] = useState([]);
   const [jornadas, setJornadas] = useState([]);
+  const [metaReg, setMetaReg] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -96,7 +99,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt, ml, tl, lc, jo] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc, jo, mr] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
@@ -105,9 +108,11 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         storage.loadJSON(KEY_TOLLS, []),
         storage.loadJSON(KEY_LOCALES, []),
         storage.loadJSON(KEY_JORNADAS, []),
+        storage.loadJSON(KEY_META, {}),
       ]);
       if (mounted) {
         setJornadas(Array.isArray(jo) ? jo : []);
+        setMetaReg(mr && typeof mr === "object" ? mr : {});
         setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
         setTolls(Array.isArray(tl) ? tl : []);
         setRoutes(Array.isArray(data) ? data : []);
@@ -146,6 +151,14 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
     } catch (err) {
       setMsg({ tipo: "error", texto: "No se pudieron guardar los ajustes: " + (err.message || err) });
     }
+  }
+
+  function marcarHecho(desde, reparto) {
+    const next = { ...metaReg, [desde]: { hecho: true, en: new Date().toISOString(), reparto } };
+    setMetaReg(next);
+    storage.saveJSON(KEY_META, next).catch((err) =>
+      setMsg({ tipo: "error", texto: "No se pudo guardar: " + (err.message || err) })
+    );
   }
 
   function persistJornadas(next) {
@@ -365,7 +378,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt, ml, tl, lc, jo] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc, jo, mr] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
@@ -374,6 +387,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         storage.loadJSON(KEY_TOLLS, []),
         storage.loadJSON(KEY_LOCALES, []),
         storage.loadJSON(KEY_JORNADAS, []),
+        storage.loadJSON(KEY_META, {}),
       ]);
       setTolls(Array.isArray(tl) ? tl : []);
       setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
@@ -383,6 +397,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
       setMaints(Array.isArray(mt) ? mt : []);
       setMeals(Array.isArray(ml) ? ml : []);
       setJornadas(Array.isArray(jo) ? jo : []);
+      setMetaReg(mr && typeof mr === "object" ? mr : {});
       setMsg({ tipo: "ok", texto: `Respaldo restaurado: ${res.rutas} rutas, ${res.codigos} códigos.` });
     } catch (err) {
       setMsg({ tipo: "error", texto: err.message || String(err) });
@@ -397,8 +412,11 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   );
   const hoyR = useMemo(() => resumenRango(datos, hoy, hoy), [datos, hoy]);
   const semanaP = periodo("semana", hoy, startDow);
-  const semanaR = useMemo(() => resumenRango(datos, semanaP.desde, semanaP.hasta), [datos, semanaP.desde, semanaP.hasta]);
   const pendientes = useMemo(() => propinasPendientes(routesVista, hoy), [routesVista, hoy]);
+  const umbrales = useMemo(() => umbralesDe(config), [config]);
+  const metaSemana = useMemo(() => netaMeta(datos, semanaP.desde, semanaP.hasta, hoy), [datos, semanaP.desde, semanaP.hasta, hoy]);
+  const prevP = periodo("semana", addDays(semanaP.desde, -7), startDow);
+  const metaPrev = useMemo(() => ({ ...netaMeta(datos, prevP.desde, prevP.hasta), label: prevP.label }), [datos, prevP.desde, prevP.hasta, prevP.label]);
   const año = Number(hoy.slice(0, 4));
   const añoR = useMemo(() => filasAño(datos, año), [datos, año]);
 
@@ -523,6 +541,17 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
 
         {tab === "hoy" && (
           <>
+            <Card>
+              <MetaBar neta={metaSemana.neta} u={umbrales} tramo={tramoMeta(metaSemana.neta, umbrales)} porLlegar={metaSemana.porLlegar} compact />
+            </Card>
+            {metaPrev.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
+              <SemanaPasada
+                semana={metaPrev}
+                tramo={tramoMeta(metaPrev.neta, umbrales)}
+                hecho={false}
+                onHecho={() => marcarHecho(prevP.desde, tramoMeta(metaPrev.neta, umbrales).reparto)}
+              />
+            )}
             {pendientes.length > 0 && (
               <div className="rounded-2xl px-3.5 py-3 flex items-center gap-3" style={{ backgroundColor: T.revisarDim, border: "1px solid #5A4720" }}>
                 <Clock size={20} style={{ color: T.revisar }} />
@@ -547,19 +576,6 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
               onSave={persistJornadas}
             />
 
-            {config.meta_semanal > 0 && (
-              <Card>
-                <Eyebrow right={<span className="gc-code">{formatMoney(semanaR.ganado)} / {formatMoney(config.meta_semanal)}</span>}>Meta de la semana</Eyebrow>
-                <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: T.border }}>
-                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.round((semanaR.ganado / config.meta_semanal) * 100))}%`, backgroundColor: T.ok }} />
-                </div>
-                <div className="text-[12.5px] mt-2" style={{ color: T.textSecondary }}>
-                  {semanaR.ganado >= config.meta_semanal
-                    ? "¡Meta cumplida!"
-                    : `Te faltan ${formatMoney(config.meta_semanal - semanaR.ganado)} · la semana cierra el ${fechaCorta(semanaP.hasta)}`}
-                </div>
-              </Card>
-            )}
 
             <div className="grid grid-cols-3 gap-2">
               <Card className="!p-3"><Mini label="Ganado hoy" value={formatMoney(hoyR.ganado)} /></Card>
@@ -580,6 +596,9 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
           <ResumenView
             datos={datos}
             startDow={startDow}
+            umbrales={umbrales}
+            metaReg={metaReg}
+            onHecho={marcarHecho}
             onSaveJornada={(nueva) => persistJornadas(jornadas.map((j) => (j.id === nueva.id ? nueva : j)))}
           />
         )}

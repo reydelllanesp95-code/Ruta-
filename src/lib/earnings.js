@@ -331,7 +331,7 @@ function withCostPerMile(t) {
 // vehículo usado). Sin él, todos usan `config`.
 export function aggregate(routes, config = DEFAULT_CONFIG, groupOf = null, configFor = null) {
   const cfg = config || DEFAULT_CONFIG;
-  const startDow = Number.isInteger(cfg.pay_week_start_day) ? cfg.pay_week_start_day : 6;
+  const startDow = Number.isInteger(cfg.pay_week_start_day) ? cfg.pay_week_start_day : DEFAULT_CONFIG.pay_week_start_day;
   const total = emptyTotals();
   const semanas = new Map();
   const meses = new Map();

@@ -108,9 +108,11 @@ describe("finalizeRoute y agregaciones", () => {
     // junio: 15 paquetes; julio: 4
     expect(totalsForKey(agg.porMes, "2026-06").paquetes).toBe(15);
     expect(totalsForKey(agg.porMes, "2026-07").paquetes).toBe(4);
-    // Semana de PAGO sáb→vie: 27 jun (sáb), 28 jun (dom) y 1 jul (mié) caen todas
-    // en la semana que inicia el sábado 27 jun → una sola semana con 19 paquetes.
-    expect(totalsForKey(agg.porSemana, "2026-06-27").paquetes).toBe(19);
+    // Semana lunes→domingo (decisión de Rey, 24-nov-2026; antes sáb→vie):
+    // 27 jun (sáb) y 28 jun (dom) van en la semana del lunes 22 jun; 1 jul (mié)
+    // en la del lunes 29 jun.
+    expect(totalsForKey(agg.porSemana, "2026-06-22").paquetes).toBe(15);
+    expect(totalsForKey(agg.porSemana, "2026-06-29").paquetes).toBe(4);
   });
 });
 
