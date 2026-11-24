@@ -15,7 +15,7 @@ import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
 import { lastOdometer } from "../lib/odometer.js";
 import { T } from "../lib/theme.js";
-import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, KEY_META, DEFAULT_CONFIG } from "../lib/constants.js";
+import { KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, KEY_META, KEY_DEUDA, KEY_FONDO, KEY_AVISOS, DEUDA_DEFAULT, DEFAULT_CONFIG } from "../lib/constants.js";
 import CleaningPanel from "./earnings/CleaningPanel.jsx";
 import { sanitizeLocal } from "../lib/cleaning.js";
 import * as storage from "../lib/storage.js";
@@ -54,9 +54,10 @@ import PasteCapture from "./earnings/PasteCapture.jsx";
 import JornadaCard from "./earnings/JornadaCard.jsx";
 import ResumenView from "./earnings/ResumenView.jsx";
 import DiaView, { nombreDia } from "./earnings/DiaView.jsx";
-import { Card, Eyebrow, Row, Mini, Segmented, MetaBar } from "./earnings/ui.jsx";
+import { Card, Eyebrow, Row, Mini, Segmented } from "./earnings/ui.jsx";
 import SemanaPasada from "./earnings/SemanaPasada.jsx";
-import { netaMeta, tramoMeta, umbralesDe } from "../lib/meta.js";
+import { MetaSemanaCard, DeudaAjustes } from "./earnings/MetaV2.jsx";
+import { netaMeta, umbralesDe, estadoSemana, fondoColchon, planDeuda, compensacion, hitosNuevos, marcarAvisados, TEXTO_AVISO, MENSAJE_FONDO_LLENO } from "../lib/meta.js";
 import { periodo, resumenRango, propinasPendientes, filasAño, addDays, gasPorMilla } from "../lib/resumen.js";
 import { withJornadaMiles } from "../lib/jornada.js";
 import {
@@ -80,6 +81,10 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   const [locales, setLocales] = useState([]);
   const [jornadas, setJornadas] = useState([]);
   const [metaReg, setMetaReg] = useState({});
+  const [deudas, setDeudas] = useState(DEUDA_DEFAULT);
+  const [fondoUsos, setFondoUsos] = useState([]);
+  const [avisos, setAvisos] = useState({});
+  const [permisoAvisos, setPermisoAvisos] = useState(() => (typeof Notification !== "undefined" ? Notification.permission : "unsupported"));
   const [loaded, setLoaded] = useState(false);
   const [previews, setPreviews] = useState(null); // rutas a importar (abre dialog)
   const [msg, setMsg] = useState(null); // { tipo: "ok"|"error", texto }
@@ -99,7 +104,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const [data, cfg, fu, mt, ml, tl, lc, jo, mr] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc, jo, mr, de, fo, av] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
@@ -109,10 +114,19 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         storage.loadJSON(KEY_LOCALES, []),
         storage.loadJSON(KEY_JORNADAS, []),
         storage.loadJSON(KEY_META, {}),
+        storage.loadJSON(KEY_DEUDA, null),
+        storage.loadJSON(KEY_FONDO, null),
+        storage.loadJSON(KEY_AVISOS, {}),
       ]);
+      const cargarMetaV2 = () => {
+        setDeudas(de && Array.isArray(de.tarjetas) ? { pagos: [], promoFin: "", ...de } : DEUDA_DEFAULT);
+        setFondoUsos(fo && Array.isArray(fo.usos) ? fo.usos : []);
+        setAvisos(av && typeof av === "object" ? av : {});
+      };
       if (mounted) {
         setJornadas(Array.isArray(jo) ? jo : []);
         setMetaReg(mr && typeof mr === "object" ? mr : {});
+        cargarMetaV2();
         setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
         setTolls(Array.isArray(tl) ? tl : []);
         setRoutes(Array.isArray(data) ? data : []);
@@ -159,6 +173,27 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
     storage.saveJSON(KEY_META, next).catch((err) =>
       setMsg({ tipo: "error", texto: "No se pudo guardar: " + (err.message || err) })
     );
+  }
+
+  function guardarEn(key, texto) {
+    return (v) => storage.saveJSON(key, v).catch((err) => setMsg({ tipo: "error", texto: `No se pudo guardar ${texto}: ` + (err.message || err) }));
+  }
+  function persistDeudas(next) {
+    setDeudas(next);
+    guardarEn(KEY_DEUDA, "la deuda")(next);
+  }
+  function usarFondo(uso) {
+    const next = [...fondoUsos, uso];
+    setFondoUsos(next);
+    guardarEn(KEY_FONDO, "el fondo")({ usos: next });
+  }
+  async function activarAvisos() {
+    try {
+      const r = await Notification.requestPermission();
+      setPermisoAvisos(r);
+    } catch {
+      setPermisoAvisos("unsupported");
+    }
   }
 
   function persistJornadas(next) {
@@ -382,7 +417,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
     try {
       const text = await file.text();
       const res = await restoreBackup(text);
-      const [data, cfg, fu, mt, ml, tl, lc, jo, mr] = await Promise.all([
+      const [data, cfg, fu, mt, ml, tl, lc, jo, mr, de, fo, av] = await Promise.all([
         storage.loadJSON(KEY_ROUTES, []),
         loadConfig(),
         storage.loadJSON(KEY_FUELUPS, []),
@@ -392,7 +427,15 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
         storage.loadJSON(KEY_LOCALES, []),
         storage.loadJSON(KEY_JORNADAS, []),
         storage.loadJSON(KEY_META, {}),
+        storage.loadJSON(KEY_DEUDA, null),
+        storage.loadJSON(KEY_FONDO, null),
+        storage.loadJSON(KEY_AVISOS, {}),
       ]);
+      const cargarMetaV2 = () => {
+        setDeudas(de && Array.isArray(de.tarjetas) ? { pagos: [], promoFin: "", ...de } : DEUDA_DEFAULT);
+        setFondoUsos(fo && Array.isArray(fo.usos) ? fo.usos : []);
+        setAvisos(av && typeof av === "object" ? av : {});
+      };
       setTolls(Array.isArray(tl) ? tl : []);
       setLocales(Array.isArray(lc) ? lc.map(sanitizeLocal) : []);
       setRoutes(Array.isArray(data) ? data : []);
@@ -402,6 +445,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
       setMeals(Array.isArray(ml) ? ml : []);
       setJornadas(Array.isArray(jo) ? jo : []);
       setMetaReg(mr && typeof mr === "object" ? mr : {});
+      cargarMetaV2();
       setMsg({ tipo: "ok", texto: `Respaldo restaurado: ${res.rutas} rutas, ${res.codigos} códigos.` });
     } catch (err) {
       setMsg({ tipo: "error", texto: err.message || String(err) });
@@ -418,9 +462,45 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   const semanaP = periodo("semana", hoy, startDow);
   const pendientes = useMemo(() => propinasPendientes(routesVista, hoy), [routesVista, hoy]);
   const umbrales = useMemo(() => umbralesDe(config), [config]);
-  const metaSemana = useMemo(() => netaMeta(datos, semanaP.desde, semanaP.hasta, hoy), [datos, semanaP.desde, semanaP.hasta, hoy]);
-  const prevP = periodo("semana", addDays(semanaP.desde, -7), startDow);
-  const metaPrev = useMemo(() => ({ ...netaMeta(datos, prevP.desde, prevP.hasta), label: prevP.label }), [datos, prevP.desde, prevP.hasta, prevP.label]);
+  // Meta v2: siempre lunes → domingo.
+  const semM = periodo("semana", hoy, 1);
+  const prevP = periodo("semana", addDays(semM.desde, -7), 1);
+  const fondo = useMemo(() => fondoColchon(datos, umbrales, fondoUsos, hoy), [datos, umbrales, fondoUsos, hoy]);
+  const plan = useMemo(() => planDeuda(deudas, umbrales, hoy), [deudas, umbrales, hoy]);
+  const metaSemana = useMemo(() => netaMeta(datos, semM.desde, semM.hasta, hoy), [datos, semM.desde, semM.hasta, hoy]);
+  const estadoHoy = useMemo(() => estadoSemana(metaSemana.neta, umbrales, { saldoFondo: fondo.saldoPara(semM.desde), deudas }), [metaSemana.neta, umbrales, fondo, semM.desde, deudas]);
+  const metaPrev = useMemo(() => {
+    const n = { ...netaMeta(datos, prevP.desde, prevP.hasta), label: prevP.label };
+    const saldo = fondo.saldoPara(prevP.desde);
+    return { n, estado: estadoSemana(n.neta, umbrales, { saldoFondo: saldo, deudas }), compensa: compensacion(datos, umbrales, saldo, prevP, hoy) };
+  }, [datos, prevP.desde, prevP.hasta, prevP.label, fondo, umbrales, deudas, hoy]);
+  const metaProps = useMemo(
+    () => ({ u: umbrales, fondo, usos: fondoUsos, deudas, plan, metaReg, onHecho: marcarHecho, onUsarFondo: usarFondo, onPague: (pago) => persistDeudas({ ...deudas, pagos: [...(deudas.pagos || []), pago] }) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [umbrales, fondo, fondoUsos, deudas, plan, metaReg]
+  );
+
+  // Avisos: al cruzar un hito (una vez por semana cada uno) y al llenarse el fondo.
+  useEffect(() => {
+    if (!loaded) return;
+    const ids = hitosNuevos(semM.desde, estadoHoy.cruzados, avisos);
+    const fondoNuevo = fondo.lleno && !(avisos.fondo || []).includes("lleno");
+    if (!ids.length && !fondoNuevo) return;
+    const textos = [...ids.map((id) => TEXTO_AVISO[id]), ...(fondoNuevo ? [MENSAJE_FONDO_LLENO(umbrales)] : [])];
+    let next = marcarAvisados(semM.desde, ids, avisos);
+    if (fondoNuevo) next = marcarAvisados("fondo", ["lleno"], next);
+    setAvisos(next);
+    storage.saveJSON(KEY_AVISOS, next).catch(() => {});
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        const mostrar = (reg) => textos.forEach((t) => (reg ? reg.showNotification("RUTA", { body: t, tag: t }) : new Notification("RUTA", { body: t })));
+        if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((reg) => mostrar(reg || null)).catch(() => mostrar(null));
+        else mostrar(null);
+      }
+    } catch {
+      // Sin permiso o sin soporte: el aviso queda marcado igual.
+    }
+  }, [loaded, semM.desde, estadoHoy.cruzados.join(","), fondo.lleno]); // eslint-disable-line react-hooks/exhaustive-deps
   const año = Number(hoy.slice(0, 4));
   const añoR = useMemo(() => filasAño(datos, año), [datos, año]);
 
@@ -545,15 +625,15 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
 
         {tab === "hoy" && (
           <>
-            <Card>
-              <MetaBar neta={metaSemana.neta} u={umbrales} tramo={tramoMeta(metaSemana.neta, umbrales)} porLlegar={metaSemana.porLlegar} compact />
-            </Card>
-            {metaPrev.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
+            <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} compact />
+            {metaPrev.n.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
               <SemanaPasada
-                semana={metaPrev}
-                tramo={tramoMeta(metaPrev.neta, umbrales)}
+                semana={metaPrev.n}
+                estado={metaPrev.estado}
+                u={umbrales}
+                compensa={metaPrev.compensa}
                 hecho={false}
-                onHecho={() => marcarHecho(prevP.desde, tramoMeta(metaPrev.neta, umbrales).reparto)}
+                onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}
               />
             )}
             {pendientes.length > 0 && (
@@ -600,9 +680,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
           <ResumenView
             datos={datos}
             startDow={startDow}
-            umbrales={umbrales}
-            metaReg={metaReg}
-            onHecho={marcarHecho}
+            meta={metaProps}
             onSaveJornada={(nueva) => persistJornadas(jornadas.map((j) => (j.id === nueva.id ? nueva : j)))}
           />
         )}
@@ -750,6 +828,15 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
             </Card>
 
             <ConfigPanel config={config} onSave={onSaveConfig} />
+            <DeudaAjustes deudas={deudas} onSave={persistDeudas} />
+            {permisoAvisos !== "unsupported" && (
+              <div className="rounded-xl px-3 py-2.5 text-[13px] flex items-center justify-between gap-2" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}`, color: T.textSecondary }}>
+                <span>Avisos al cruzar un hito de la meta: {permisoAvisos === "granted" ? "activados" : permisoAvisos === "denied" ? "bloqueados (actívalos en Ajustes del teléfono)" : "apagados"}</span>
+                {permisoAvisos === "default" && (
+                  <button type="button" onClick={activarAvisos} className="rounded-lg px-3 text-[13px] font-semibold" style={{ backgroundColor: T.red, color: "#fff", minHeight: 40 }}>Activar</button>
+                )}
+              </div>
+            )}
 
             <CleaningPanel routes={routes} locales={locales} configFor={configFor} onSaveLocales={saveLocales} />
 

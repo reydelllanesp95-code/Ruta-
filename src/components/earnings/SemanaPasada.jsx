@@ -1,20 +1,27 @@
 import React from "react";
 import { T } from "../../lib/theme.js";
 import { formatMoney } from "../../lib/earnings.js";
+import { MENSAJE_COMPENSACION } from "../../lib/meta.js";
 import { Card, Eyebrow, Row } from "./ui.jsx";
+import { Inversiones } from "./MetaV2.jsx";
 
-// Lo que tocaba mover con la semana que cerró. «Hecho» solo lo apunta.
-export default function SemanaPasada({ semana, tramo, hecho, onHecho }) {
-  const r = tramo.reparto;
+// Cierre del lunes: lo que tocaba mover con la semana que cerró. «Hecho» solo
+// lo apunta.
+export default function SemanaPasada({ semana, estado, u, compensa = false, hecho, onHecho }) {
+  const r = estado.reparto;
+  const invertir = estado.invertir || compensa;
   return (
     <Card>
       <Eyebrow right={semana.label}>Semana pasada</Eyebrow>
-      <Row label="Neta" value={formatMoney(semana.neta)} color={tramo.color} strong />
+      <Row label="Neta" value={formatMoney(semana.neta)} color={estado.color} strong />
+      {r.fondo > 0 && <Row label="Al fondo colchón" value={formatMoney(r.fondo)} />}
       {r.tarjetas > 0 && <Row label="A tarjetas" value={formatMoney(r.tarjetas)} />}
-      {r.deuda > 0 && <Row label="A deuda" value={formatMoney(r.deuda)} />}
-      {r.inversion > 0 && <Row label="A inversión" hint={`(${formatMoney(r.largoPlazo)} largo plazo · ${formatMoney(r.trading)} trading)`} value={formatMoney(r.inversion)} />}
-      {r.extra > 0 && <Row label="A ahorro o más inversión" value={formatMoney(r.extra)} />}
-      {tramo.n === 1 && <div className="text-[13px] py-1" style={{ color: T.textSecondary }}>Solo lo básico: no tocaba mover nada.</div>}
+      {r.extra > 0 && <Row label="Extra a deuda" value={formatMoney(r.extra)} />}
+      {invertir && <Row label="A inversión" value={formatMoney(u.inversion)} />}
+      {r.sinAsignar > 0 && !compensa && <Row label="Sin asignar" hint="(no llegó a invertir)" value={formatMoney(r.sinAsignar)} />}
+      {compensa && <div className="text-[13px] py-1" style={{ color: T.ok }}>{MENSAJE_COMPENSACION}</div>}
+      {invertir && <Inversiones lista={u.inversiones} />}
+      {estado.consejo && <div className="text-[13px] py-1" style={{ color: T.textSecondary }}>{estado.consejo}</div>}
       {hecho ? (
         <div className="text-[13px] mt-2" style={{ color: T.ok }}>✓ Hecho</div>
       ) : (

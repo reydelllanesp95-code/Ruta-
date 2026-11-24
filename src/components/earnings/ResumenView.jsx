@@ -6,9 +6,9 @@ import { periodo, moverPeriodo, resumenPeriodo, resumenDia, promedioDia } from "
 import { platformOf, platformLabel, isCleaning } from "../../lib/platforms.js";
 import { Card, Eyebrow, NetoHero, Deducciones, Segmented, AppBadge, APP_COLOR } from "./ui.jsx";
 import JornadaHoras from "./JornadaHoras.jsx";
-import { MetaBar } from "./ui.jsx";
 import SemanaPasada from "./SemanaPasada.jsx";
-import { netaMeta, tramoMeta, historialMeta, TRAMO_COLOR } from "../../lib/meta.js";
+import { MetaSemanaCard, MetaMesCard, FondoCard, DeudaCard } from "./MetaV2.jsx";
+import { netaMeta, estadoSemana, historialMeta, compensacion, mesMeta, historialMeses } from "../../lib/meta.js";
 
 const TIPOS = [
   { id: "día", label: "Día" },
@@ -19,7 +19,7 @@ const TIPOS = [
 
 // Pestaña Resumen: periodo con ‹ ›, Ganado − Deducciones = Neto, deducciones,
 // comparación con el periodo anterior, últimos periodos y reparto por app.
-export default function ResumenView({ datos, startDow, onSaveJornada, umbrales, metaReg = {}, onHecho }) {
+export default function ResumenView({ datos, startDow, onSaveJornada, meta = null }) {
   const [editando, setEditando] = useState(null);
   const [p, setP] = useState(() => periodo("semana", todayISO(), startDow));
   const esDia = p.tipo === "día";
@@ -32,8 +32,22 @@ export default function ResumenView({ datos, startDow, onSaveJornada, umbrales, 
   const dia = useMemo(() => (esDia ? resumenDia(datos, p.desde) : null), [datos, p, esDia]);
   const maxSerie = Math.max(...serie.map((s) => Math.abs(s.neto)), 1);
   const esSemana = p.tipo === "semana";
-  const meta = useMemo(() => (esSemana && umbrales ? netaMeta(datos, p.desde, p.hasta, todayISO()) : null), [datos, p, esSemana, umbrales]);
-  const hist = useMemo(() => (esSemana && umbrales ? historialMeta(datos, p.desde, umbrales, 8) : []), [datos, p, esSemana, umbrales]);
+  const hoy = todayISO();
+  const mv = meta;
+  const sem = useMemo(() => {
+    if (!esSemana || !mv) return null;
+    const n = netaMeta(datos, p.desde, p.hasta, hoy);
+    const saldo = mv.fondo.saldoPara(p.desde);
+    return {
+      n,
+      estado: estadoSemana(n.neta, mv.u, { saldoFondo: saldo, deudas: mv.deudas }),
+      hist: historialMeta(datos, p.desde, mv.u, 8, mv.fondo),
+      compensa: p.hasta < hoy ? compensacion(datos, mv.u, saldo, p, hoy) : false,
+    };
+  }, [datos, p, esSemana, mv, hoy]);
+  const refMes = p.tipo === "mes" ? p.desde : p.hasta < hoy ? p.hasta : hoy;
+  const mes = useMemo(() => ((esSemana || p.tipo === "mes") && mv ? mesMeta(datos, mv.u, mv.fondo.saldo, refMes, hoy) : null), [datos, esSemana, p.tipo, mv, refMes, hoy]);
+  const histMeses = useMemo(() => (mes ? historialMeses(datos, mv.u, refMes, hoy, 6, mv.fondo.saldo) : []), [mes, datos, mv, refMes, hoy]);
   const semanaCerrada = esSemana && p.hasta < todayISO();
   const nombre = { día: "día", semana: "semana", mes: "mes", año: "año" }[p.tipo];
 
@@ -50,35 +64,26 @@ export default function ResumenView({ datos, startDow, onSaveJornada, umbrales, 
         </button>
       </div>
 
-      {meta && (
-        <Card>
-          <MetaBar neta={meta.neta} u={umbrales} tramo={tramoMeta(meta.neta, umbrales)} porLlegar={meta.porLlegar} />
+      {sem && (
+        <MetaSemanaCard estado={sem.estado} plan={mv.plan} porLlegar={sem.n.porLlegar} hist={sem.hist} desdeSel={p.desde}>
           <div className="text-[12px] mt-2" style={{ color: T.textFaint }}>
-            Neta = {formatMoney(meta.ganado)} ganado − {formatMoney(meta.gastos.gasolina)} gasolina pagada − {formatMoney(meta.gastos.mantenimiento)} mantenimiento − {formatMoney(meta.gastos.comida)} comida − {formatMoney(meta.gastos.peajes)} peajes.
+            Neta = {formatMoney(sem.n.ganado)} ganado − {formatMoney(sem.n.gastos.gasolina)} gasolina pagada − {formatMoney(sem.n.gastos.mantenimiento)} mantenimiento − {formatMoney(sem.n.gastos.comida)} comida − {formatMoney(sem.n.gastos.peajes)} peajes.
           </div>
-          <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${T.border}` }}>
-            <div className="text-[12.5px] mb-2" style={{ color: T.textFaint }}>
-              Últimas 8 semanas · llegaste a verde en {hist.filter((h) => h.tramo >= 3).length} de 8
-            </div>
-            <div className="grid grid-cols-8 gap-1.5">
-              {hist.map((h) => (
-                <div key={h.desde} className="flex flex-col items-center gap-1">
-                  <div className="w-full rounded-md" style={{ height: 22, backgroundColor: h.neta > 0 ? TRAMO_COLOR[h.tramo] : T.border, opacity: h.desde === p.desde ? 1 : 0.75 }} title={`${h.label}: ${formatMoney(h.neta)}`} />
-                  <span className="text-[9.5px] text-center leading-tight" style={{ color: h.desde === p.desde ? T.textPrimary : T.textFaint }}>{h.label.split(" – ")[0]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
+        </MetaSemanaCard>
       )}
-      {meta && semanaCerrada && meta.ganado > 0 && (
+      {sem && semanaCerrada && sem.n.ganado > 0 && (
         <SemanaPasada
-          semana={{ ...meta, label: p.label }}
-          tramo={tramoMeta(meta.neta, umbrales)}
-          hecho={Boolean(metaReg[p.desde]?.hecho)}
-          onHecho={() => onHecho && onHecho(p.desde, tramoMeta(meta.neta, umbrales).reparto)}
+          semana={{ ...sem.n, label: p.label }}
+          estado={sem.estado}
+          u={mv.u}
+          compensa={sem.compensa}
+          hecho={Boolean(mv.metaReg[p.desde]?.hecho)}
+          onHecho={() => mv.onHecho(p.desde, sem.estado.reparto)}
         />
       )}
+      {mes && <MetaMesCard mes={mes} hist={histMeses} />}
+      {sem && <FondoCard fondo={mv.fondo} u={mv.u} usos={mv.usos} onUsar={mv.onUsarFondo} />}
+      {sem && <DeudaCard plan={mv.plan} onPague={mv.onPague} />}
 
       {r.registros === 0 ? (
         <Card>

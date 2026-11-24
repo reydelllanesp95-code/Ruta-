@@ -10,21 +10,28 @@ export default function ConfigPanel({ config, onSave }) {
   const [maint, setMaint] = useState(String(config.maintenance_cost_per_mile));
   const [tMaint, setTMaint] = useState(String(config.tucson_maintenance_cost_per_mile));
   const META = [
-    ["meta_basico", "Básico $"],
-    ["meta_invertir", "Invertir desde $"],
-    ["meta_dorado", "Dorado desde $"],
-    ["meta_deuda", "A deuda $"],
-    ["meta_inversion", "A inversión $"],
-    ["meta_trading_pct", "Trading %"],
+    ["meta_colchon", "Colchón $"],
+    ["meta_deuda_semana", "Deuda semana $"],
+    ["meta_extra", "Extra deuda $"],
+    ["fondo_tope", "Tope fondo $"],
+    ["fondo_inicial", "Fondo inicial $"],
+    ["plan_meses", "Plan (meses)"],
   ];
-  const metaDe = (c) => Object.fromEntries(META.map(([k]) => [k, String(c[k] ?? "")]));
+  const FECHAS = [
+    ["fondo_desde", "Fondo cuenta desde"],
+    ["plan_inicio", "Plan empezó"],
+  ];
+  const metaDe = (c) => Object.fromEntries([...META, ...FECHAS].map(([k]) => [k, String(c[k] ?? "")]));
   const [meta, setMeta] = useState(() => metaDe(config));
+  const invDe = (c) => (c.meta_inversiones || []).map((x) => ({ nombre: x.nombre, monto: String(x.monto) }));
+  const [inv, setInv] = useState(() => invDe(config));
   const [error, setError] = useState("");
 
   function start() {
     setMaint(String(config.maintenance_cost_per_mile));
     setTMaint(String(config.tucson_maintenance_cost_per_mile));
     setMeta(metaDe(config));
+    setInv(invDe(config));
     setError("");
     setOpen(true);
   }
@@ -40,10 +47,20 @@ export default function ConfigPanel({ config, onSave }) {
       if (!v.ok) return setError(v.error);
       metaVals[k] = v.value;
     }
-    if (!(metaVals.meta_basico <= metaVals.meta_invertir && metaVals.meta_invertir <= metaVals.meta_dorado)) {
-      return setError("Los tramos deben ir de menor a mayor: básico ≤ invertir ≤ dorado.");
+    if (!(metaVals.plan_meses > 0)) return setError("El plan tiene que durar al menos 1 mes.");
+    for (const [k, label] of FECHAS) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(meta[k])) return setError(`${label}: pon una fecha.`);
+      metaVals[k] = meta[k];
     }
-    if (metaVals.meta_trading_pct > 100) return setError("Trading % no puede pasar de 100.");
+    const inversiones = [];
+    for (const x of inv) {
+      if (!String(x.nombre).trim()) continue;
+      const v = validateNonNegative(x.monto, x.nombre);
+      if (!v.ok) return setError(v.error);
+      inversiones.push({ nombre: String(x.nombre).trim(), monto: v.value });
+    }
+    if (!inversiones.length) return setError("Pon al menos una inversión.");
+    metaVals.meta_inversiones = inversiones;
     onSave({
       ...config,
       maintenance_cost_per_mile: mt.value,
@@ -98,6 +115,34 @@ export default function ConfigPanel({ config, onSave }) {
           <Field key={k} label={label} value={meta[k]} onChange={(v) => setMeta((m) => ({ ...m, [k]: v }))} />
         ))}
       </div>
+      <div className="grid grid-cols-2 gap-2 mt-2">
+        {FECHAS.map(([k, label]) => (
+          <Field key={k} type="date" label={label} value={meta[k]} onChange={(v) => setMeta((m) => ({ ...m, [k]: v }))} />
+        ))}
+      </div>
+      <div className="text-[11px] mt-3 mb-1" style={{ color: T.textSecondary }}>
+        Reparto de la inversión (total {"$"}{inv.reduce((t, x) => t + (Number(x.monto) || 0), 0)})
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {inv.map((x, i) => (
+          <div key={i} className="flex gap-1 items-end">
+            <Field label={x.nombre || "Nueva"} value={x.monto} onChange={(v) => setInv((l) => l.map((y, j) => (j === i ? { ...y, monto: v } : y)))} />
+            <button type="button" aria-label={`Quitar ${x.nombre}`} onClick={() => setInv((l) => l.filter((_, j) => j !== i))} className="pb-1.5 text-[15px]" style={{ color: T.textFaint }}>×</button>
+          </div>
+        ))}
+      </div>
+      <form
+        className="flex gap-2 mt-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const nombre = e.currentTarget.elements.nueva.value.trim();
+          if (nombre) setInv((l) => [...l, { nombre, monto: "0" }]);
+          e.currentTarget.reset();
+        }}
+      >
+        <input name="nueva" aria-label="Nueva inversión" placeholder="Añadir (p. ej. QQQ)" className="flex-1 rounded-lg px-2 py-1.5 text-[13px] outline-none" style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }} />
+        <button type="submit" className="rounded-lg px-3 text-[13px]" style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}>+</button>
+      </form>
       {error && (
         <div className="text-[12px] mt-2" style={{ color: T.red }}>
           {error}
@@ -118,7 +163,7 @@ export default function ConfigPanel({ config, onSave }) {
   );
 }
 
-function Field({ label, value, onChange }) {
+function Field({ label, value, onChange, type = "text" }) {
   return (
     <label className="block">
       <span className="text-[10.5px] uppercase gc-eyebrow" style={{ color: T.textFaint }}>
@@ -127,7 +172,8 @@ function Field({ label, value, onChange }) {
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        inputMode="decimal"
+        type={type}
+        inputMode={type === "date" ? undefined : "decimal"}
         className="gc-code w-full mt-1 rounded-lg px-2 py-1.5 text-[13.5px] outline-none"
         style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
       />

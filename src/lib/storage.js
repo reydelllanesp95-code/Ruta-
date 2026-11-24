@@ -5,7 +5,7 @@
 // - Si existe window.storage con datos viejos, se migran una sola vez.
 // - Todo va en try/catch: si localStorage falla, no se rompe la app.
 
-import { SCHEMA_VERSION } from "./constants.js";
+import { SCHEMA_VERSION, KEY_CONFIG, META_V1_KEYS } from "./constants.js";
 
 function hasLocalStorage() {
   try {
@@ -15,13 +15,27 @@ function hasLocalStorage() {
   }
 }
 
-// Lleva un blob persistido a la versión de esquema actual. Hoy solo hay v1;
-// las migraciones futuras se encadenan aquí. [Aud 12]
-function migrate(blob) {
+// Migraciones encadenadas: MIGRACIONES[v](key, data) lleva de v a v+1.
+const MIGRACIONES = {
+  // 1 → 2: meta semanal v2. Los umbrales viejos de la config se borran (la
+  // config los rellena con los nuevos por defecto).
+  1: (key, data) => {
+    if (key !== KEY_CONFIG || !data || typeof data !== "object") return data;
+    const out = { ...data };
+    for (const k of META_V1_KEYS) delete out[k];
+    return out;
+  },
+};
+
+// Lleva un blob persistido a la versión de esquema actual. [Aud 12]
+export function migrate(blob, key = "") {
   // Formato nuevo: { schemaVersion, data }
   if (blob && typeof blob === "object" && "schemaVersion" in blob && "data" in blob) {
     let { schemaVersion, data } = blob;
-    // while (schemaVersion < SCHEMA_VERSION) { ...transformar...; schemaVersion++; }
+    while (schemaVersion < SCHEMA_VERSION) {
+      if (MIGRACIONES[schemaVersion]) data = MIGRACIONES[schemaVersion](key, data);
+      schemaVersion++;
+    }
     return data;
   }
   // Formato viejo (window.storage guardaba el dato pelado): se acepta tal cual.
@@ -68,7 +82,7 @@ export async function get(key) {
     if (!hasLocalStorage()) return await migrateFromWindowStorage(key);
     const raw = localStorage.getItem(key);
     if (raw == null) return await migrateFromWindowStorage(key);
-    const data = migrate(JSON.parse(raw));
+    const data = migrate(JSON.parse(raw), key);
     return { value: JSON.stringify(data) };
   } catch {
     return null;

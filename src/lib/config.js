@@ -23,6 +23,19 @@ function weekday(value, fallback) {
   return Number.isInteger(n) && n >= 0 && n <= 6 ? n : fallback;
 }
 
+function fecha(value, fallback) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : fallback;
+}
+
+// Reparto de la inversión: lista de { nombre, monto ≥ 0 } con nombre.
+function inversiones(value) {
+  if (!Array.isArray(value)) return DEFAULT_CONFIG.meta_inversiones;
+  const ok = value
+    .filter((x) => x && String(x.nombre || "").trim())
+    .map((x) => ({ nombre: String(x.nombre).trim(), monto: nonNeg(x.monto, 0) }));
+  return ok.length ? ok : DEFAULT_CONFIG.meta_inversiones;
+}
+
 // Devuelve un config válido a partir de cualquier entrada (o null).
 export function sanitizeConfig(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
@@ -41,12 +54,15 @@ export function sanitizeConfig(raw) {
     // 6 (sábado) era el valor de antes por defecto, nunca elegido a mano: pasa
     // a la semana lunes→domingo que eligió Rey.
     pay_week_start_day: Number(c.pay_week_start_day) === 6 ? DEFAULT_CONFIG.pay_week_start_day : weekday(c.pay_week_start_day, DEFAULT_CONFIG.pay_week_start_day),
-    meta_basico: nonNeg(c.meta_basico, DEFAULT_CONFIG.meta_basico),
-    meta_invertir: nonNeg(c.meta_invertir, DEFAULT_CONFIG.meta_invertir),
-    meta_dorado: nonNeg(c.meta_dorado, DEFAULT_CONFIG.meta_dorado),
-    meta_deuda: nonNeg(c.meta_deuda, DEFAULT_CONFIG.meta_deuda),
-    meta_inversion: nonNeg(c.meta_inversion, DEFAULT_CONFIG.meta_inversion),
-    meta_trading_pct: nonNeg(c.meta_trading_pct, DEFAULT_CONFIG.meta_trading_pct),
+    meta_colchon: nonNeg(c.meta_colchon, DEFAULT_CONFIG.meta_colchon),
+    meta_deuda_semana: nonNeg(c.meta_deuda_semana, DEFAULT_CONFIG.meta_deuda_semana),
+    meta_extra: nonNeg(c.meta_extra, DEFAULT_CONFIG.meta_extra),
+    meta_inversiones: inversiones(c.meta_inversiones),
+    fondo_tope: nonNeg(c.fondo_tope, DEFAULT_CONFIG.fondo_tope),
+    fondo_inicial: nonNeg(c.fondo_inicial, DEFAULT_CONFIG.fondo_inicial),
+    fondo_desde: fecha(c.fondo_desde, DEFAULT_CONFIG.fondo_desde),
+    plan_inicio: fecha(c.plan_inicio, DEFAULT_CONFIG.plan_inicio),
+    plan_meses: positive(c.plan_meses, DEFAULT_CONFIG.plan_meses),
   };
 }
 

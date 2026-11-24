@@ -48,3 +48,18 @@ describe("loadConfig / saveConfig (localStorage simulado)", () => {
     expect(c.maintenance_cost_per_mile).toBe(0.2);
   });
 });
+
+describe("migración 1 → 2 (meta semanal v2)", () => {
+  it("borra los umbrales viejos de la config y pone los nuevos por defecto", async () => {
+    const { migrate } = await import("../storage.js");
+    const { KEY_CONFIG } = await import("../constants.js");
+    const v1 = { schemaVersion: 1, data: { mpg: 20, meta_basico: 250, meta_invertir: 300, meta_dorado: 900, meta_deuda: 350, meta_inversion: 100, meta_trading_pct: 5 } };
+    const data = migrate(v1, KEY_CONFIG);
+    expect(data).toEqual({ mpg: 20 });
+    const c = sanitizeConfig(data);
+    expect([c.meta_colchon, c.meta_deuda_semana, c.meta_extra, c.fondo_tope]).toEqual([80, 680, 40, 500]);
+    expect(c.meta_inversiones.reduce((s, x) => s + x.monto, 0)).toBe(100);
+    // Otras claves no se tocan.
+    expect(migrate({ schemaVersion: 1, data: [{ a: 1 }] }, "route_earnings_v1")).toEqual([{ a: 1 }]);
+  });
+});

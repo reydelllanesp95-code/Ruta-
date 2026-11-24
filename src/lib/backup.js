@@ -1,6 +1,6 @@
 // Respaldo: exportar/importar toda la app como JSON. [Aud 13][Aud 14]
 
-import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, KEY_META, SCHEMA_VERSION } from "./constants.js";
+import { KEY_CODES, KEY_ROUTES, KEY_FUELUPS, KEY_MAINT, KEY_MEALS, KEY_TOLLS, KEY_LOCALES, KEY_JORNADAS, KEY_META, KEY_DEUDA, KEY_FONDO, KEY_AVISOS, SCHEMA_VERSION } from "./constants.js";
 import { loadJSON, saveJSON } from "./storage.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { SHIFT_CSV_HEADER } from "./platforms.js";
@@ -20,11 +20,14 @@ export async function buildBackup() {
   const locales = (await loadJSON(KEY_LOCALES, [])) || [];
   const jornadas = (await loadJSON(KEY_JORNADAS, [])) || [];
   const metas = (await loadJSON(KEY_META, {})) || {};
+  const deuda = (await loadJSON(KEY_DEUDA, null)) || null;
+  const fondo = (await loadJSON(KEY_FONDO, null)) || null;
+  const avisos = (await loadJSON(KEY_AVISOS, {})) || {};
   return {
     type: BACKUP_TYPE,
     schemaVersion: SCHEMA_VERSION,
     exportadoEn: new Date().toISOString(),
-    data: { codigos, rutas, config, fuelups, mantenimiento, comidas, peajes, locales, jornadas, metas },
+    data: { codigos, rutas, config, fuelups, mantenimiento, comidas, peajes, locales, jornadas, metas, deuda, fondo, avisos },
   };
 }
 
@@ -80,6 +83,11 @@ export async function restoreBackup(jsonText) {
   // metas opcional: backups viejos (sin metas) → {}.
   const metas = parsed.data.metas && typeof parsed.data.metas === "object" ? parsed.data.metas : {};
   await saveJSON(KEY_META, metas);
+  // Meta v2 (opcionales en respaldos viejos).
+  const obj = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : null);
+  if (obj(parsed.data.deuda)) await saveJSON(KEY_DEUDA, parsed.data.deuda);
+  if (obj(parsed.data.fondo)) await saveJSON(KEY_FONDO, parsed.data.fondo);
+  await saveJSON(KEY_AVISOS, obj(parsed.data.avisos) || {});
   return {
     codigos: codigos.length,
     rutas: rutas.length,
