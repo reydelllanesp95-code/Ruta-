@@ -16,6 +16,7 @@ export const KEY_MAINT = "ruta_maint_v1"; // historial de mantenimiento
 export const KEY_MEALS = "ruta_meals_v1"; // gastos de comida del día de trabajo
 export const KEY_TOLLS = "ruta_tolls_v1"; // peajes (SunPass / E-PASS)
 export const KEY_LOCALES = "ruta_locales_v1"; // locales de limpieza (facturación y fees de Corvus)
+export const KEY_META = "ruta_meta_semanas_v1"; // semanas de la meta marcadas «Hecho»
 export const KEY_JORNADAS = "ruta_jornadas_v1"; // odómetro al salir y al llegar a casa
 export const KEY_SHIFT_DRAFT = "ruta_turno_en_curso_v1"; // borrador del turno que se está apuntando
 
@@ -49,7 +50,9 @@ export const MAINT_PER_MILE_DEFAULT = 0.1; // USD/milla de mantenimiento estimad
 
 // Día en que INICIA la semana de pago (0=domingo … 6=sábado). El usuario cobra
 // los viernes, así que la semana va sábado→viernes: inicia en sábado (6).
-export const PAY_WEEK_START_DEFAULT = 6;
+// Semana lunes→domingo (antes sábado→viernes): a Rey le pagan los martes, así
+// que la semana cierra el domingo y el martes mueve el dinero.
+export const PAY_WEEK_START_DEFAULT = 1;
 
 // Segundo vehículo: Hyundai Tucson. MPG asumido para reparto en ciudad; es una
 // suposición editable (no verificada para su año/motor) hasta tener llenados reales.
@@ -62,7 +65,13 @@ export const DEFAULT_CONFIG = {
   tucson_mpg: TUCSON_MPG_DEFAULT,
   tucson_maintenance_cost_per_mile: MAINT_PER_MILE_DEFAULT,
   pay_week_start_day: PAY_WEEK_START_DEFAULT,
-  meta_semanal: 0, // 0 = sin meta
+  // Meta semanal (deuda + inversión): umbrales de la neta y reparto.
+  meta_basico: 250,
+  meta_invertir: 700,
+  meta_dorado: 900,
+  meta_deuda: 350,
+  meta_inversion: 100,
+  meta_trading_pct: 5,
 };
 
 // Fees de Corvus sobre lo facturado (royalty 10% + administración 10% + seguro
