@@ -11,6 +11,7 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
   const [error, setError] = useState("");
   const [plan, setPlan] = useState(null);
   const [plataforma, setPlataforma] = useState(null);
+  const [avisos, setAvisos] = useState([]);
   const [leyendo, setLeyendo] = useState("");
   const fotosRef = useRef(null);
   const textoRef = useRef(null);
@@ -41,6 +42,7 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
         try { localStorage.setItem(MARCA, t); } catch {}
       });
       setTexto(r.text || "");
+      setAvisos(r.avisos || []);
       if (!r.ok) return setError(r.error);
       setPlataforma(r.plataforma);
       setPlan(r.plan);
@@ -66,6 +68,7 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
 
   function leer() {
     const r = readCapture(texto, routes);
+    setAvisos(r.avisos || []);
     if (!r.ok) {
       setPlan(null);
       return setError(r.error);
@@ -113,6 +116,12 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
         </button>
       </div>
       {error && <div className="text-[13px]" style={{ color: T.red }}>{error}</div>}
+      {plan && avisos.length > 0 && (
+        <div className="rounded-lg px-3 py-2 text-[12.5px] space-y-1" style={{ backgroundColor: T.revisarDim, color: T.revisar }}>
+          <div>Dejé fuera o pendiente {avisos.length} cosa(s); lo demás sí se puede aplicar:</div>
+          {avisos.map((a, i) => <div key={i}>· {a}</div>)}
+        </div>
+      )}
 
       {plan && (
         <div className="space-y-2">

@@ -21,6 +21,7 @@ const TOKEN = new RegExp(
     `(?<base>\\bbase\\s*:?\\s*\\$\\s*${AMOUNT})`,
     `(?<tip>\\b(?:consejos|propinas?|tips?)\\s*:?\\s*\\$\\s*${AMOUNT})`,
     `(?<dinero>\\$\\s*${AMOUNT})`,
+    "(?<pendiente>(?:consejos|propinas?|tips?)\\s+pendientes?|tips? pending)",
   ].join("|"),
   "giu"
 );
@@ -48,11 +49,14 @@ function inferYear(month, day, today) {
   return month * 100 + day > ref ? y - 1 : y;
 }
 
-// Devuelve { ok, items, pagos, error }. items: { tipo: "bloque"|"ajuste",
-// fecha, horaInicio, horaFin, base, propina, total }.
+// Devuelve { ok, items, pagos, avisos, error }. items: { tipo: "bloque"|"ajuste",
+// fecha, horaInicio, horaFin, base, propina, total, propinaPendiente? }.
+// Lo que no se puede leer bien NO se adivina: se deja fuera y se avisa, y el
+// resto sigue. Solo es error si no queda nada.
 export function parseFlexText(text, today = new Date()) {
-  const headers = [];
-  const grupos = [];
+  const filas = [];
+  const sueltos = []; // importes en el orden en que salen (para columnas separadas)
+  let actual = null;
   let payoutNext = false;
   for (const m of normalize(text).matchAll(TOKEN)) {
     const g = m.groups;
@@ -60,64 +64,93 @@ export function parseFlexText(text, today = new Date()) {
       const mes = MESES[m[2]];
       if (!mes) continue;
       const dia = Number(m[3]);
-      const y = inferYear(mes, dia, today);
-      const fecha = `${y}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-      headers.push({ fecha, tipo: payoutNext ? "pago" : null });
+      const fecha = `${inferYear(mes, dia, today)}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+      actual = { fecha, pago: payoutNext, tipo: null };
+      filas.push(actual);
       payoutNext = false;
-    } else if (g.rango) {
-      const h = headers.at(-1);
-      if (h && !h.tipo) Object.assign(h, { tipo: "bloque", horaInicio: to24(m[5], m[6], m[7]), horaFin: to24(m[8], m[9], m[10]) });
-    } else if (g.ajuste) {
-      const h = headers.at(-1);
-      if (h && !h.tipo) h.tipo = "ajuste";
     } else if (g.pago) {
       payoutNext = true;
-    } else if (g.base) {
-      const gr = grupos.at(-1);
-      if (gr) gr.base = money(m[14]);
-    } else if (g.tip) {
-      const gr = grupos.at(-1);
-      if (gr) gr.propina = money(m[16]);
-    } else if (g.dinero) {
-      grupos.push({ total: money(m[18]) });
+    } else if (g.dinero || g.base || g.tip || g.pendiente) {
+      const ev = g.dinero ? { total: money(m[18]) } : g.base ? { base: money(m[14]) } : g.tip ? { propina: money(m[16]) } : { pendiente: true };
+      sueltos.push(ev);
+      if (!actual) continue; // p. ej. «Saldo actual» arriba del todo
+      if (ev.total != null) {
+        if (actual.total == null) actual.total = ev.total;
+        else actual.extra = true;
+      } else Object.assign(actual, ev.pendiente ? { pendiente: true } : ev);
+    } else if (g.rango && actual && !actual.tipo) {
+      Object.assign(actual, { tipo: "bloque", horaInicio: to24(m[5], m[6], m[7]), horaFin: to24(m[8], m[9], m[10]) });
+    } else if (g.ajuste && actual && !actual.tipo) {
+      actual.tipo = "ajuste";
     }
   }
-  if (!headers.length) return { ok: false, error: "No encontré ningún bloque de Flex en el texto pegado." };
-  if (headers.length !== grupos.length) {
-    return {
-      ok: false,
-      error: `No cuadra el texto: veo ${headers.length} fecha(s) y ${grupos.length} importe(s). Copia la captura completa (sin filas cortadas arriba o abajo).`,
-    };
+  if (!filas.length) return { ok: false, error: "No encontré ningún bloque de Flex en el texto." };
+
+  // Columnas separadas (primero todas las fechas, luego todos los importes):
+  // se emparejan por orden, solo si las cuentas cuadran.
+  const columnas = filas.length > 1 && filas.slice(0, -1).every((f) => f.total == null) && sueltos.length;
+  if (columnas) {
+    for (const f of filas) for (const k of ["total", "base", "propina", "pendiente", "extra"]) delete f[k];
+    const grupos = [];
+    for (const ev of sueltos) {
+      if (ev.total != null) grupos.push({ total: ev.total });
+      else if (grupos.length) Object.assign(grupos.at(-1), ev);
+    }
+    if (grupos.length !== filas.length) {
+      return { ok: false, error: `No cuadra el texto: veo ${filas.length} fecha(s) y ${grupos.length} importe(s).` };
+    }
+    filas.forEach((f, i) => Object.assign(f, grupos[i]));
   }
+
   const items = [];
   const pagos = [];
+  const avisos = [];
   const vistos = new Set();
-  for (const [i, h] of headers.entries()) {
-    const gr = grupos[i];
-    if (h.tipo === "pago") {
-      pagos.push({ fecha: h.fecha, total: gr.total });
+  for (const f of filas) {
+    const donde = `${fechaCortaISO(f.fecha)}${f.horaInicio ? ` ${f.horaInicio}–${f.horaFin}` : ""}`;
+    if (f.pago) {
+      if (f.total != null) pagos.push({ fecha: f.fecha, total: f.total });
       continue;
     }
-    if (!h.tipo) return { ok: false, error: `La fila del ${h.fecha} no tiene horario ni dice «Ajuste manual».` };
+    if (f.total == null) {
+      // Una fecha suelta sin importe (p. ej. «Pago programado para el …») no es un bloque.
+      if (f.tipo) avisos.push(`${donde}: no se ve el importe; no lo puse.`);
+      continue;
+    }
+    if (!f.tipo) {
+      avisos.push(`${donde} $${f.total}: no se ve el horario; no lo puse.`);
+      continue;
+    }
     let item;
-    if (h.tipo === "ajuste") {
-      item = { tipo: "ajuste", fecha: h.fecha, base: gr.total, propina: 0, total: gr.total };
+    if (f.tipo === "ajuste") {
+      item = { tipo: "ajuste", fecha: f.fecha, base: f.total, propina: 0, total: f.total };
     } else {
-      // Bloque sin desglose (sin propina, p. ej. «Pagado»): todo es base.
-      const sinDesglose = gr.base == null && gr.propina == null;
-      const base = sinDesglose ? gr.total : gr.base ?? null;
-      const propina = gr.propina ?? 0;
-      if (base == null || round2(base + propina) !== gr.total) {
-        return { ok: false, error: `El bloque del ${h.fecha} ${h.horaInicio}–${h.horaFin}: el total $${gr.total} no es base + propina. Revisa que el texto esté completo.` };
+      // Sin desglose (sin propina, «Pagado» o propina pendiente): todo es base.
+      const sinDesglose = f.base == null && f.propina == null;
+      const base = sinDesglose ? f.total : f.base ?? null;
+      const propina = f.propina ?? 0;
+      if (base == null || round2(base + propina) !== f.total) {
+        avisos.push(`${donde}: el total $${f.total} no es base + propina (posible error al leer); no lo puse.`);
+        continue;
       }
-      item = { tipo: "bloque", fecha: h.fecha, horaInicio: h.horaInicio, horaFin: h.horaFin, base, propina, total: gr.total };
+      item = { tipo: "bloque", fecha: f.fecha, horaInicio: f.horaInicio, horaFin: f.horaFin, base, propina, total: f.total };
+      if (f.pendiente && sinDesglose) {
+        item.propinaPendiente = true;
+        avisos.push(`${donde}: propina pendiente; la pongo cuando Flex la muestre.`);
+      }
     }
     const key = [item.tipo, item.fecha, item.horaInicio || "", item.total].join("|");
     if (vistos.has(key)) continue; // dos capturas que se solapan
     vistos.add(key);
     items.push(item);
   }
-  return { ok: true, items, pagos };
+  if (!items.length) return { ok: false, error: avisos[0] || "No encontré ningún bloque de Flex que se pudiera leer.", avisos };
+  return { ok: true, items, pagos, avisos };
+}
+
+function fechaCortaISO(iso) {
+  const [, mo, d] = iso.split("-").map(Number);
+  return `${d} ${["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"][mo - 1]}`;
 }
 
 // ---- Emparejar con lo guardado ----
@@ -182,8 +215,11 @@ export function planFlexImport(items, routes) {
     for (const [idx, its] of porBloque) {
       const b = bloques[idx];
       const pago = round2(its.reduce((s, x) => s + x.base, 0));
-      const propina = round2(its.reduce((s, x) => s + x.propina, 0));
       const antes = { pago: round2(Number(b.pago) || 0), propina: round2(Number(b.propina) || 0) };
+      // Propina pendiente en Flex: no se baja la que ya hubiera apuntada.
+      const propina = its.every((x) => x.propinaPendiente)
+        ? antes.propina
+        : round2(its.reduce((s, x) => s + (x.propinaPendiente ? 0 : x.propina), 0));
       if (antes.pago === pago && antes.propina === propina) {
         sinCambios += its.length;
         continue;
@@ -300,10 +336,14 @@ export function parseLyftText(text, today = new Date(), extra = []) {
     }
   }
   const out = [];
+  const avisos = [];
   for (const d of dias) {
     const suma = round2(d.viajes.reduce((s, x) => s + x, 0));
     if (d.total == null || suma !== d.total) {
-      return { ok: false, error: `Lyft ${d.fecha}: los viajes suman $${suma} y el día dice $${d.total ?? "?"}. Copia la captura completa del día.` };
+      // Un día que no cuadra se deja fuera (sus viajes se leyeron mal o falta
+      // parte de la captura); los demás días siguen.
+      avisos.push(`Lyft ${fechaCortaISO(d.fecha)}: los viajes suman $${suma} y el día dice $${d.total ?? "?"}; no lo puse.`);
+      continue;
     }
     const orden = [...d.horas].sort();
     out.push({
@@ -318,7 +358,8 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       ...(dias.length === 1 && (reservado ?? conectado) && semana ? { semana } : {}),
     });
   }
-  return { ok: true, dias: out };
+  if (!out.length) return { ok: false, error: avisos[0], avisos };
+  return { ok: true, dias: out, avisos };
 }
 
 function lyftHoras(d) {
@@ -382,11 +423,11 @@ export function readCapture(text, routes, today = new Date(), extra = []) {
   if (isLyftText(text)) {
     const r = parseLyftText(text, today, extra);
     if (!r.ok) return r;
-    return { ok: true, plataforma: "lyft", plan: planLyftImport(r.dias, routes) };
+    return { ok: true, plataforma: "lyft", plan: planLyftImport(r.dias, routes), avisos: r.avisos, leidos: r.dias.length };
   }
   const r = parseFlexText(text, today);
   if (!r.ok) return r;
-  return { ok: true, plataforma: "flex", plan: planFlexImport(r.items, routes) };
+  return { ok: true, plataforma: "flex", plan: planFlexImport(r.items, routes), avisos: r.avisos, leidos: r.items.length };
 }
 
 export function applyCapture(plataforma, routes, plan, opts) {
