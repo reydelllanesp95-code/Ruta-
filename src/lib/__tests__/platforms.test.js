@@ -155,6 +155,6 @@ describe("agregación multiplataforma", () => {
     expect(netPerHour(null)).toBeNull();
   });
   it("ACTIVE_PLATFORMS no incluye OnTrac", () => {
-    expect(ACTIVE_PLATFORMS).toEqual(["flex", "spark", "otro"]);
+    expect(ACTIVE_PLATFORMS).toEqual(["flex", "spark", "lyft", "otro"]);
   });
 });

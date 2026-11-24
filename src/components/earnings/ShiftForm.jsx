@@ -175,7 +175,7 @@ export default function ShiftForm({
 
   return (
     <div className="space-y-2.5" onChangeCapture={() => setEditado(true)}>
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1">
         {SHIFT_PLATFORMS.map((p) => {
           const active = p === plataforma;
           return (
