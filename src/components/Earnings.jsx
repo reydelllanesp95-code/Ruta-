@@ -576,7 +576,13 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
           </>
         )}
 
-        {tab === "resumen" && <ResumenView datos={datos} startDow={startDow} />}
+        {tab === "resumen" && (
+          <ResumenView
+            datos={datos}
+            startDow={startDow}
+            onSaveJornada={(nueva) => persistJornadas(jornadas.map((j) => (j.id === nueva.id ? nueva : j)))}
+          />
+        )}
 
         {tab === "turnos" && diaSel && (
           <DiaView
@@ -586,6 +592,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
             onFecha={setDiaSel}
             onBack={() => setDiaSel(null)}
             renderRegistro={renderRegistro}
+            onSaveJornada={(nueva) => persistJornadas(jornadas.map((j) => (j.id === nueva.id ? nueva : j)))}
           />
         )}
 

@@ -6,6 +6,7 @@ import { vehicleLabel } from "../../lib/vehicles.js";
 import { startJornada, closeJornada, openJornada, jornadaMiles, pararTrabajo, seguirTrabajando } from "../../lib/jornada.js";
 import OdometerWheel from "./OdometerWheel.jsx";
 import VehiclePicker from "./VehiclePicker.jsx";
+import JornadaHoras from "./JornadaHoras.jsx";
 
 function ahora() {
   const d = new Date();
@@ -16,6 +17,7 @@ function ahora() {
 export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSave }) {
   const abierta = openJornada(jornadas);
   const [editando, setEditando] = useState(false);
+  const [horas, setHoras] = useState(false);
   const [vehiculo, setVehiculo] = useState(defaultVehicle || "kia");
   const [odo, setOdo] = useState("");
   const [error, setError] = useState("");
@@ -52,8 +54,19 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
               ? `Hoy: ${millasHoy} millas`
               : "Hoy no has salido"}
         </span>
+        {abierta && !editando && !horas && (
+          <button type="button" onClick={() => setHoras(true)} className="text-[12.5px] underline shrink-0 ml-2" style={{ color: T.textSecondary, minHeight: 32 }}>
+            Editar horas
+          </button>
+        )}
       </div>
-      {editando ? (
+      {horas && abierta ? (
+        <JornadaHoras
+          jornada={abierta}
+          onSave={(nueva) => onSave(jornadas.map((j) => (j.id === nueva.id ? nueva : j)))}
+          onClose={() => setHoras(false)}
+        />
+      ) : editando ? (
         <>
           {!abierta && <VehiclePicker value={vehiculo} onChange={setVehiculo} />}
           <OdometerWheel label={abierta ? "Odómetro al llegar" : "Odómetro al salir"} value={odo} base={base} onChange={setOdo} />

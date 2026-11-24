@@ -5,6 +5,7 @@ import { formatMoney, round2, todayISO } from "../../lib/earnings.js";
 import { periodo, moverPeriodo, resumenPeriodo, resumenDia, promedioDia } from "../../lib/resumen.js";
 import { platformOf, platformLabel, isCleaning } from "../../lib/platforms.js";
 import { Card, Eyebrow, NetoHero, Deducciones, Segmented, AppBadge, APP_COLOR } from "./ui.jsx";
+import JornadaHoras from "./JornadaHoras.jsx";
 
 const TIPOS = [
   { id: "día", label: "Día" },
@@ -15,7 +16,8 @@ const TIPOS = [
 
 // Pestaña Resumen: periodo con ‹ ›, Ganado − Deducciones = Neto, deducciones,
 // comparación con el periodo anterior, últimos periodos y reparto por app.
-export default function ResumenView({ datos, startDow }) {
+export default function ResumenView({ datos, startDow, onSaveJornada }) {
+  const [editando, setEditando] = useState(null);
   const [p, setP] = useState(() => periodo("semana", todayISO(), startDow));
   const esDia = p.tipo === "día";
   const { actual: r, anterior: a, serie } = useMemo(() => {
@@ -53,6 +55,15 @@ export default function ResumenView({ datos, startDow }) {
         </>
       )}
 
+      {esDia && onSaveJornada && (datos.jornadas || []).filter((j) => j.fecha === p.desde).map((j) =>
+            editando === j.id ? (
+              <JornadaHoras key={j.id} jornada={j} onSave={onSaveJornada} onClose={() => setEditando(null)} />
+            ) : (
+              <button key={j.id} type="button" onClick={() => setEditando(j.id)} className="text-[12.5px] underline px-1" style={{ color: T.textSecondary, minHeight: 32 }}>
+                Editar horas de la jornada (salí / paré / llegué)
+              </button>
+            )
+          )}
       <Card>
         <Eyebrow right={`vs ${a.label}`}>Comparación</Eyebrow>
         <div className="grid gap-x-2 gap-y-1.5 text-[13px] items-baseline" style={{ gridTemplateColumns: "1.2fr 1fr 1fr 1fr" }}>
