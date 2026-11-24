@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Plus,
   RefreshCw,
+  ClipboardPaste,
 } from "lucide-react";
 import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
 import { loadDraft, clearDraft, draftHasData } from "../lib/shiftDraft.js";
@@ -47,6 +48,7 @@ import RouteCard from "./earnings/RouteCard.jsx";
 import ImportDialog from "./earnings/ImportDialog.jsx";
 import ShiftForm from "./earnings/ShiftForm.jsx";
 import ShiftCard from "./earnings/ShiftCard.jsx";
+import PasteCapture from "./earnings/PasteCapture.jsx";
 import PlatformSummary from "./earnings/PlatformSummary.jsx";
 import {
   makeShift,
@@ -72,6 +74,7 @@ export default function Earnings() {
   const [saveState, setSaveState] = useState("idle");
   // Si quedó un turno a medias (la app se cerró), el formulario abre solo.
   const [addingShift, setAddingShift] = useState(() => draftHasData(loadDraft()));
+  const [pegando, setPegando] = useState(false);
   const [hayBorrador, setHayBorrador] = useState(() => draftHasData(loadDraft()));
 
   const fileRef = useRef(null);
@@ -460,6 +463,36 @@ export default function Earnings() {
           >
             <Plus size={17} /> {hayBorrador ? "Seguir turno en curso" : "Añadir turno"}
           </button>
+        )}
+
+        {pegando ? (
+          <PasteCapture
+            routes={routes}
+            vehiculo={lastVehicle}
+            onApply={(next, n) => {
+              persist(next);
+              setPegando(false);
+              setMsg({ tipo: "ok", texto: `Captura aplicada: ${n} cambio(s).` });
+            }}
+            onCancel={() => setPegando(false)}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setPegando(true)}
+              className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
+              style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }}
+            >
+              <ClipboardPaste size={15} /> Pegar captura de Flex
+            </button>
+            <button
+              onClick={onExport}
+              className="flex items-center justify-center gap-2 rounded-xl py-2.5 text-[13px]"
+              style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
+            >
+              <DownloadCloud size={15} /> Exportar respaldo
+            </button>
+          </div>
         )}
 
         <PlatformSummary items={agg.porGrupo} />

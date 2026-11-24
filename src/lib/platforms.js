@@ -12,6 +12,7 @@ import { VEHICLES, DEFAULT_VEHICLE } from "./vehicles.js";
 export const PLATFORMS = {
   flex: { label: "Amazon Flex", archived: false },
   spark: { label: "Spark Driver", archived: false },
+  lyft: { label: "Lyft", archived: false },
   otro: { label: "Otro", archived: false },
   ontrac: { label: "OnTrac", archived: true },
   // Viajes a limpiar (EverOP). No es reparto: va aparte de las ganancias.
@@ -213,6 +214,7 @@ export function isShift(route) {
 const PLATFORM_ALIASES = {
   flex: "flex", "amazon flex": "flex", amazon: "flex",
   spark: "spark", "spark driver": "spark", walmart: "spark",
+  lyft: "lyft",
   otro: "otro", other: "otro",
   limpieza: "limpieza", cleaning: "limpieza",
 };
