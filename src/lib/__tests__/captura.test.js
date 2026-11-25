@@ -298,3 +298,37 @@ describe('millas en la captura con estadísticas de semana', () => {
     expect(parseLyftText(LYFT + '\n' + STATS, HOY).dias[0].millasApp).toBe(30.5);
   });
 });
+
+describe('Lyft «Hoy 24 de nov» con bono (lectura del iPhone, datos inventados)', () => {
+  const HOY_TXT = `< Actividad diaria
+Hoy 10 de mar $60.00
+(A $30.00 Bonos 9:09 a.m. >
+$20.00 Lyft
+€) incluye Propina de $3.00 y Bono  8:44am. >
+de $1.00
+A $10.00 Lyft 7:37 a.m. >
+Q Estadísticas de manejo
+nov 10
+Tiempo reservado
+Tiempo empleado en manejar para 1h 30 min
+recoger y dejar pasajeros
+Kilómetros reservados
+Kilómetros manejados durante el
+tiempo reservado
+Tiempo conectado
+Tiempo total en línea en laapp de  2h8min`.replace('nov 10', 'mar 10');
+  it('lee el día de «Hoy», suma el bono pero no lo cuenta como viaje', () => {
+    const r = parseLyftText(HOY_TXT, new Date(2025, 2, 10, 13));
+    expect(r.ok).toBe(true);
+    expect(r.dias[0]).toMatchObject({ fecha: '2025-03-10', total: 60, propina: 3, viajes: 2, horasTrabajo: 1.5 });
+    expect(r.avisos.join(' ')).toMatch(/no leí las millas/);
+  });
+  it('por la pantalla: Lyft, sin avisos graves', () => {
+    const r = readCapture(HOY_TXT, [], new Date(2025, 2, 10, 13));
+    expect(r).toMatchObject({ ok: true, plataforma: 'lyft', graves: 0 });
+    expect(r.plan.cambios[0]).toMatchObject({ tipo: 'nuevo', pago: 57, propina: 3 });
+  });
+  it('«Ayer 9 de mar» también vale', () => {
+    expect(parseLyftText('Ayer 9 de mar $12.00\n$12.00 Lyft 3:00 p.m.', new Date(2025, 2, 10)).dias[0].fecha).toBe('2025-03-09');
+  });
+});
