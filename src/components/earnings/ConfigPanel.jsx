@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Settings, Save, X, Wrench } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { validateNonNegative } from "../../lib/earnings.js";
+import { retencionDeCheque } from "../../lib/config.js";
 
 // Panel para ajustar el mantenimiento por milla y la meta semanal. La
 // gasolina no se configura: se usa la pagada. El neto se recalcula solo.
@@ -25,6 +26,14 @@ export default function ConfigPanel({ config, onSave }) {
   const [meta, setMeta] = useState(() => metaDe(config));
   const invDe = (c) => (c.meta_inversiones || []).map((x) => ({ nombre: x.nombre, monto: String(x.monto) }));
   const [inv, setInv] = useState(() => invDe(config));
+  const UPS = [
+    ["ups_tarifa_hora", "UPS $/hora"],
+    ["ups_tarifa_milla", "UPS $/milla"],
+    ["ups_retencion_pct", "Impuestos %"],
+  ];
+  const upsDe = (c) => Object.fromEntries(UPS.map(([k]) => [k, String(c[k] ?? "")]));
+  const [ups, setUps] = useState(() => upsDe(config));
+  const [cheque, setCheque] = useState({ bruto: "", impuestos: "" });
   const [error, setError] = useState("");
 
   function start() {
@@ -32,6 +41,8 @@ export default function ConfigPanel({ config, onSave }) {
     setTMaint(String(config.tucson_maintenance_cost_per_mile));
     setMeta(metaDe(config));
     setInv(invDe(config));
+    setUps(upsDe(config));
+    setCheque({ bruto: "", impuestos: "" });
     setError("");
     setOpen(true);
   }
@@ -61,6 +72,12 @@ export default function ConfigPanel({ config, onSave }) {
     }
     if (!inversiones.length) return setError("Pon al menos una inversión.");
     metaVals.meta_inversiones = inversiones;
+    for (const [k, label] of UPS) {
+      const v = validateNonNegative(ups[k], label.replace(/ [$%]$/, ""));
+      if (!v.ok) return setError(v.error);
+      metaVals[k] = v.value;
+    }
+    if (metaVals.ups_retencion_pct > 100) return setError("Los impuestos de UPS no pueden pasar de 100 %.");
     onSave({
       ...config,
       maintenance_cost_per_mile: mt.value,
@@ -78,7 +95,7 @@ export default function ConfigPanel({ config, onSave }) {
         style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}
       >
         <span className="flex items-center gap-2 text-[13px]" style={{ color: T.textSecondary }}>
-          <Wrench size={15} /> Mantenimiento y meta semanal
+          <Wrench size={15} /> Mantenimiento, meta y UPS
         </span>
         <Settings size={15} style={{ color: T.textFaint }} />
       </button>
@@ -143,6 +160,34 @@ export default function ConfigPanel({ config, onSave }) {
         <input name="nueva" aria-label="Nueva inversión" placeholder="Añadir (p. ej. QQQ)" className="flex-1 rounded-lg px-2 py-1.5 text-[13px] outline-none" style={{ backgroundColor: T.surface, color: T.textPrimary, border: `1px solid ${T.border}` }} />
         <button type="submit" className="rounded-lg px-3 text-[13px]" style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}>+</button>
       </form>
+      <div className="text-[11px] mt-3 mb-1" style={{ color: T.textSecondary }}>
+        UPS (los turnos ya guardados no cambian)
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {UPS.map(([k, label]) => (
+          <Field key={k} label={label} value={ups[k]} onChange={(v) => setUps((u) => ({ ...u, [k]: v }))} />
+        ))}
+      </div>
+      <div className="text-[11px] mt-2 mb-1" style={{ color: T.textFaint }}>
+        Con tu cheque de UPS: pon el pago de horas (sin millas) y los impuestos que te quitaron.
+      </div>
+      <div className="grid grid-cols-3 gap-2 items-end">
+        <Field label="Bruto horas $" value={cheque.bruto} onChange={(v) => setCheque((c) => ({ ...c, bruto: v }))} />
+        <Field label="Impuestos $" value={cheque.impuestos} onChange={(v) => setCheque((c) => ({ ...c, impuestos: v }))} />
+        <button
+          type="button"
+          onClick={() => {
+            const pct = retencionDeCheque(cheque.bruto, cheque.impuestos);
+            if (pct == null) return setError("Revisa el cheque: los impuestos deben ser menores que el bruto.");
+            setError("");
+            setUps((u) => ({ ...u, ups_retencion_pct: String(pct) }));
+          }}
+          className="rounded-lg py-1.5 text-[12.5px]"
+          style={{ backgroundColor: T.surface, color: T.textSecondary, border: `1px solid ${T.border}` }}
+        >
+          Usar su %
+        </button>
+      </div>
       {error && (
         <div className="text-[12px] mt-2" style={{ color: T.red }}>
           {error}

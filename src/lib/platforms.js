@@ -13,6 +13,8 @@ export const PLATFORMS = {
   flex: { label: "Amazon Flex", archived: false },
   spark: { label: "Spark Driver", archived: false },
   lyft: { label: "Lyft", archived: false },
+  // Empleo por hora + por milla; UPS retiene impuestos (solo sobre las horas).
+  ups: { label: "UPS", archived: false },
   otro: { label: "Otro", archived: false },
   ontrac: { label: "OnTrac", archived: true },
   // Viajes a limpiar (EverOP). No es reparto: va aparte de las ganancias.
@@ -28,6 +30,24 @@ export const SHIFT_PLATFORMS = [...ACTIVE_PLATFORMS, "limpieza"];
 
 export function isCleaning(route) {
   return Boolean(route && route.plataforma === "limpieza");
+}
+
+export function isUps(route) {
+  return Boolean(route && route.plataforma === "ups");
+}
+
+// Pago de un turno UPS: las horas pagan impuestos; las millas son reembolso.
+// tarifas: { hora, milla, retencionPct }. Devuelve los montos ya redondeados.
+export function upsPay(horas, millas, tarifas) {
+  const brutoHoras = round2(horas * tarifas.hora);
+  const retenido = round2((brutoHoras * tarifas.retencionPct) / 100);
+  const reembolso = round2(millas * tarifas.milla);
+  return { brutoHoras, retenido, reembolso, neto: round2(brutoHoras - retenido + reembolso) };
+}
+
+function upsTarifasValidas(t) {
+  const ok = (n) => Number.isFinite(Number(n)) && Number(n) >= 0;
+  return t && ok(t.hora) && ok(t.milla) && ok(t.retencionPct) && Number(t.retencionPct) <= 100;
 }
 
 export function platformOf(route) {
@@ -63,7 +83,7 @@ export function hoursBetween(inicio, fin) {
 export function validateShift(input) {
   let i = input || {};
   let summary = null;
-  if (i.bloques != null && i.plataforma !== "limpieza") {
+  if (i.bloques != null && i.plataforma !== "limpieza" && i.plataforma !== "ups") {
     summary = summarizeBlocks(i.bloques, i.salidaCasa, i.llegadaCasa);
     if (!summary.ok) return summary;
     i = { ...i, pago: summary.pago, propina: summary.propina, horaInicio: summary.horaInicio, horaFin: summary.horaFin };
@@ -72,6 +92,12 @@ export function validateShift(input) {
     return { ok: false, error: "Elige una plataforma." };
   }
   const limpieza = i.plataforma === "limpieza";
+  const ups = i.plataforma === "ups";
+  if (ups) {
+    if (!i.horaInicio || !i.horaFin) return { ok: false, error: "Pon la hora de entrada y de salida de UPS." };
+    if (!upsTarifasValidas(i.upsTarifas)) return { ok: false, error: "Revisa las tarifas de UPS en Más." };
+    i = { ...i, pago: "0", propina: "" };
+  }
   const fecha = parseDatePart(i.fecha);
   if (!fecha) return { ok: false, error: "La fecha no es válida." };
   // En limpieza no hay pago por viaje (Corvus paga al mes): pago vacío = 0.
@@ -147,8 +173,15 @@ export function validateShift(input) {
       salidaCasa: haySalida ? i.salidaCasa : "",
       llegadaCasa: hayLlegada ? i.llegadaCasa : "",
       local: limpieza ? String(i.local || "").trim() : "",
+      ...(ups ? { ups: upsDetalle(i.horaInicio, i.horaFin, millas.value, i.upsTarifas) } : {}),
     },
   };
+}
+
+function upsDetalle(inicio, fin, millas, t) {
+  const tarifas = { hora: Number(t.hora), milla: Number(t.milla), retencionPct: Number(t.retencionPct) };
+  const horasPagadas = hoursBetween(inicio, fin);
+  return { ...tarifas, horasPagadas, millasPagadas: millas, ...upsPay(horasPagadas, millas, tarifas) };
 }
 
 // Campos derivados de un turno válido (se usa al crear y al editar).
@@ -170,9 +203,10 @@ function shiftFields(v, nota) {
     vehiculo: v.vehiculo,
     odoInicio: v.odoInicio,
     odoFin: v.odoFin,
-    pagoBase: round2(v.pago),
-    propina: round2(v.propina),
-    ganancia: round2(v.pago + v.propina),
+    ...(v.ups ? { ups: v.ups } : {}),
+    pagoBase: v.ups ? v.ups.neto : round2(v.pago),
+    propina: v.ups ? 0 : round2(v.propina),
+    ganancia: v.ups ? v.ups.neto : round2(v.pago + v.propina),
     nota: String(nota || "").trim(),
   };
 }
