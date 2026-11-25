@@ -17,3 +17,7 @@ Criterios (se fijan ANTES de programar; no se tocan tras ver resultados):
 5. Jornada abierta y en pausa: se ve «En pausa desde HH:MM» con botón para
    quitarla (también fuera del campo).
 6. Tests y build en verde; comprobado en el navegador a tamaño iPhone.
+
+Nota (antes de programar, sin ver resultados): en el ejemplo del criterio 3
+la cuenta da 10.48 h (807 − 115 − 63 = 629 min), no 10.47; error de
+aritmética al escribirlo. La regla del criterio no cambia.
