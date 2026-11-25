@@ -152,3 +152,16 @@ export function editarHorasJornada(j, { horaSalida, horaParada = "", horaLlegada
   else delete out.horaParada;
   return { ok: true, jornada: out };
 }
+
+// Pausas para el editor. En una jornada cerrada, la parada final («dejé de
+// trabajar» antes de llegar) se muestra como una pausa más hasta la llegada.
+export function pausasParaEditar(j) {
+  const ps = (j.pausas || []).map((p) => ({ ...p }));
+  if (j.odoLlegada != null && j.horaParada && j.horaLlegada) ps.push({ desde: j.horaParada, hasta: j.horaLlegada });
+  return ps;
+}
+
+// ¿La pausa termina al llegar a casa? (se ve como «Dejé de trabajar»)
+export function esParadaFinal(j, p) {
+  return Boolean(j.horaLlegada) && p.hasta === j.horaLlegada;
+}

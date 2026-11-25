@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, round2 } from "../../lib/earnings.js";
 import { resumenDia, addDays, nombreDia, detalleGastos } from "../../lib/resumen.js";
-import { jornadaMiles } from "../../lib/jornada.js";
+import { jornadaMiles, esParadaFinal } from "../../lib/jornada.js";
 import { vehicleLabel } from "../../lib/vehicles.js";
 import { Card, Eyebrow, NetoHero, Deducciones } from "./ui.jsx";
 import JornadaHoras from "./JornadaHoras.jsx";
@@ -57,7 +57,7 @@ export default function DiaView({ datos, fecha, jornadas, onFecha, onBack, rende
                   </div>
                   {(j.pausas || []).length > 0 && (
                     <div className="text-[12.5px] mt-1" style={{ color: T.textSecondary }}>
-                      Pausas: {j.pausas.map((p) => `${p.desde}–${p.hasta}`).join(" · ")}
+                      Pausas: {j.pausas.map((p) => (esParadaFinal(j, p) ? `dejé de trabajar a las ${p.desde}` : `${p.desde}–${p.hasta}`)).join(" · ")}
                     </div>
                   )}
                   {onSaveJornada && (

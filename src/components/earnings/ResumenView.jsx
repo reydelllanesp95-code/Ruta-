@@ -8,6 +8,7 @@ import { Card, Eyebrow, NetoHero, Deducciones, Segmented, AppBadge, APP_COLOR } 
 import JornadaHoras from "./JornadaHoras.jsx";
 import SemanaPasada from "./SemanaPasada.jsx";
 import RendimientoCard from "./RendimientoCard.jsx";
+import { esParadaFinal } from "../../lib/jornada.js";
 import { MetaSemanaCard, MetaMesCard, FondoCard, DeudaCard } from "./MetaV2.jsx";
 import { netaMeta, estadoSemana, historialMeta, compensacion, mesMeta, historialMeses } from "../../lib/meta.js";
 
@@ -212,6 +213,10 @@ function LineaDeTiempo({ lista, jornadas }) {
   for (const j of jornadas) {
     items.push({ hora: j.horaSalida, texto: `Salí de casa · ${Number(j.odoSalida).toLocaleString("en-US")}`, tipo: "casa" });
     for (const p of j.pausas || []) {
+      if (esParadaFinal(j, p)) {
+        items.push({ hora: p.desde, texto: "Dejé de trabajar", tipo: "casa" });
+        continue;
+      }
       items.push({ hora: p.desde, texto: "Pausa", tipo: "casa" });
       items.push({ hora: p.hasta, texto: "Volví a trabajar", tipo: "casa" });
     }
