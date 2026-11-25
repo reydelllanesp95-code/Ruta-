@@ -136,3 +136,28 @@ describe('millas de Lyft (criterio 5 de docs/criterios-por-hora-millas-lyft.md)'
     expect(r[0].millas).toBe(120);
   });
 });
+
+describe('editar horas simple (docs/criterios-editar-horas-simple.md)', () => {
+  it('1. la parada final de una jornada cerrada se edita como pausa hasta la llegada, mismas horas', async () => {
+    const { pausasParaEditar, editarHorasJornada, horasJornada } = await import('../jornada.js');
+    const j = { id: 'j', fecha: '2026-11-24', horaSalida: '07:00', odoSalida: 1, odoLlegada: 2, horaLlegada: '15:30', horaParada: '15:00', pausas: [{ desde: '09:30', hasta: '11:20' }] };
+    const ps = pausasParaEditar(j);
+    expect(ps).toEqual([{ desde: '09:30', hasta: '11:20' }, { desde: '15:00', hasta: '15:30' }]);
+    const r = editarHorasJornada(j, { horaSalida: '07:00', horaLlegada: '15:30', pausas: ps });
+    expect(r.ok).toBe(true);
+    expect(r.jornada.horaParada).toBeUndefined();
+    expect(horasJornada(r.jornada)).toBe(horasJornada(j));
+  });
+  it('3. salí 5:24, llegué 18:51, pausas 9:30–11:25 y 14:07–15:10 → 10.48 h', async () => {
+    const { editarHorasJornada, horasJornada } = await import('../jornada.js');
+    const j = { id: 'j', fecha: '2026-11-24', horaSalida: '05:24', odoSalida: 1, odoLlegada: 2, horaLlegada: '18:51' };
+    const r = editarHorasJornada(j, { horaSalida: '05:24', horaLlegada: '18:51', pausas: [{ desde: '09:30', hasta: '11:25' }, { desde: '14:07', hasta: '15:10' }] });
+    expect(horasJornada(r.jornada)).toBe(10.48);
+  });
+  it('4. una pausa que acaba al llegar es parada final', async () => {
+    const { esParadaFinal } = await import('../jornada.js');
+    const j = { horaLlegada: '18:51' };
+    expect(esParadaFinal(j, { desde: '18:00', hasta: '18:51' })).toBe(true);
+    expect(esParadaFinal(j, { desde: '09:30', hasta: '11:25' })).toBe(false);
+  });
+});
