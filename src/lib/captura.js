@@ -270,7 +270,8 @@ const LYFT_TOKEN = new RegExp(
     // «dom 22 de nov»
     // «dom 22 de nov» (sin año: «domingo, 22 de noviembre de 2026» es la
     // pantalla de un cobro, no la actividad del día)
-    "(?<fecha>\\b(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom)[a-záéíóú]*\\.?,?\\s+(\\d{1,2})\\s+de\\s+([a-z]{3})[a-z]*\\b(?!\\s+de\\s+\\d{4}))",
+    // «Hoy 24 de nov» / «Ayer 23 de nov»: el día de hoy/ayer no lleva día de la semana.
+    "(?<fecha>\\b(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom|hoy|ayer)[a-záéíóú]*\\.?,?\\s+(\\d{1,2})\\s+de\\s+([a-z]{3})[a-z]*\\b(?!\\s+de\\s+\\d{4}))",
     `(?<extra>\\b(propina|bono|ajuste)\\s+de\\s+\\$\\s*${AMOUNT})`,
     // «de $1.00» suelto: el iPhone a veces parte «Bono … de $1.00» con la hora en medio
     `(?<suelto>\\bde\\s+\\$\\s*${AMOUNT})`,
@@ -307,7 +308,7 @@ export function parseLyftText(text, today = new Date(), extra = []) {
     if (ya) {
       dias.splice(dias.indexOf(ya), 1);
       dias.push(ya);
-    } else dias.push({ fecha, total: null, viajes: [], todos: [], propina: 0, horas: [] });
+    } else dias.push({ fecha, total: null, viajes: [], todos: [], propina: 0, horas: [], bonos: 0 });
   };
   // Barra «‹ nov 21  nov 22  nov 23 ›»: fechas seguidas; la elegida es la del medio.
   let racha = [];
@@ -318,7 +319,8 @@ export function parseLyftText(text, today = new Date(), extra = []) {
     empezar(elegida.fecha);
     racha = [];
   };
-  for (const m of normalize(text).matchAll(LYFT_TOKEN)) {
+  const norm = normalize(text);
+  for (const m of norm.matchAll(LYFT_TOKEN)) {
     const g = m.groups;
     if (g.fecha2) {
       const mes = MESES[m[26]];
@@ -359,7 +361,11 @@ export function parseLyftText(text, today = new Date(), extra = []) {
         // El total repetido (detrás de una hoja de estadísticas) no es un viaje.
         if (v !== d.total) {
           d.todos.push(v);
-          if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) d.viajes.push(v);
+          if (round2(d.viajes.reduce((x, y) => x + y, 0)) < d.total) {
+            d.viajes.push(v);
+            // «$50.00 Bonos»: suma al día pero no es un viaje.
+            if (/^\s*bonos?\b/.test(norm.slice(m.index + m[0].length, m.index + m[0].length + 12))) d.bonos += 1;
+          }
         }
       }
     } else if (g.hora && d) {
@@ -406,7 +412,7 @@ export function parseLyftText(text, today = new Date(), extra = []) {
       fecha: d.fecha,
       total: d.total,
       propina: d.propina,
-      viajes: d.viajes.filter((x) => x > 0).length,
+      viajes: d.viajes.filter((x) => x > 0).length - d.bonos,
       horaInicio: orden[0] || "",
       horaFin: orden.at(-1) || "",
       horasTrabajo: dias.length === 1 ? reservado ?? conectado : null,
@@ -417,6 +423,10 @@ export function parseLyftText(text, today = new Date(), extra = []) {
     });
   }
   if (!out.length) return { ok: false, error: avisos[0], avisos };
+  // Estadísticas leídas pero sin las millas: no es grave, se reparten por horas.
+  if (out.length === 1 && reservado != null && millasR == null) {
+    avisos.push(`Lyft ${fechaCortaISO(out[0].fecha)}: no leí las millas («Kilómetros reservados»); se reparten por horas. Si las quieres exactas, pega el texto de esa captura.`);
+  }
   return { ok: true, dias: out, avisos };
 }
 
@@ -494,7 +504,7 @@ export function applyLyftPlan(routes, plan, { vehiculo } = {}) {
 // Avisos que solo informan (propinas que llegan después) frente a los que
 // dicen que algo se dejó fuera o no se pudo comprobar.
 function graves(avisos = []) {
-  return avisos.filter((a) => !/propina pendiente|no muestra las propinas/.test(a)).length;
+  return avisos.filter((a) => !/propina pendiente|no muestra las propinas|no leí las millas/.test(a)).length;
 }
 
 // Un solo punto de entrada para la pantalla: decide Flex o Lyft.
