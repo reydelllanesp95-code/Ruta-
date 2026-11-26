@@ -127,6 +127,28 @@ export function horasJornada(j) {
   return round2(Math.max(0, total - pausa) / 60);
 }
 
+// Horas de la jornada (sin pausas) que caen dentro de [inicio, fin]; sirve
+// para no contar dos veces un trabajo con horas propias, como UPS.
+export function horasJornadaEn(j, inicio, fin) {
+  const s = minutos(j && j.horaSalida);
+  const e = minutos((j && j.horaParada) || (j && j.horaLlegada));
+  const a0 = minutos(inicio), b0 = minutos(fin);
+  if (s == null || e == null || a0 == null || b0 == null) return 0;
+  const off = (m) => (m - s + 1440) % 1440;
+  const F = off(e);
+  const a = off(a0);
+  const b = a + ((b0 - a0 + 1440) % 1440);
+  const corte = (x, y) => Math.max(0, Math.min(y, b, F) - Math.max(x, a, 0));
+  let min = corte(0, F);
+  for (const p of j.pausas || []) {
+    const d = minutos(p.desde), h = minutos(p.hasta);
+    if (d == null || h == null) continue;
+    const pd = off(d);
+    min -= corte(pd, pd + ((h - d + 1440) % 1440));
+  }
+  return round2(Math.max(0, min) / 60);
+}
+
 // Corregir las horas a mano (p. ej. se olvidó tocar «Paré»). Vacío en
 // horaParada la quita. No toca odómetros.
 export function editarHorasJornada(j, { horaSalida, horaParada = "", horaLlegada = "", pausas = j.pausas || [] }) {

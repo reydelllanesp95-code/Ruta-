@@ -646,7 +646,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
                   </div>
                 </div>
                 <button onClick={() => setPegando(true)} className="rounded-xl px-3 text-[13px] font-semibold" style={{ backgroundColor: T.revisar, color: "#1A1305", minHeight: 44 }}>
-                  Subir captura
+                  Subir capturas
                 </button>
               </div>
             )}
@@ -661,7 +661,8 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
                 onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}
               />
             )}
-            {capturas}
+            {/* Con el aviso de propinas, su botón ya abre las capturas: no repetirlo. */}
+            {(pegando || pendientes.length === 0) && capturas}
             <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} semanaKey={semM.desde} compact onTap={() => onTab("resumen")} tapLabel="Ver la semana en Resumen" />
           </>
         )}
