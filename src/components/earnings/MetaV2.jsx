@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, fechaCorta, round2, todayISO, makeUUID } from "../../lib/earnings.js";
-import { MENSAJE_FONDO_LLENO, partesSemana, proximaMeta } from "../../lib/meta.js";
+import { MENSAJE_FONDO_LLENO, partesSemana, proximaMeta, cambioTarjetas } from "../../lib/meta.js";
 import { Card, Eyebrow, Row, MetaBar } from "./ui.jsx";
 
 // Tarjetas de la meta v2 (semana, mes, fondo colchón, deuda). Solo pintan:
@@ -279,26 +279,42 @@ export function CierresPendientes({ pendientes, onCierre }) {
   );
 }
 
+// Barra que se llena al aparecer (sin animación con «Reducir movimiento»).
+function BarraQueSeLlena({ pct, color, alto = 14 }) {
+  const quieto = sinMovimiento();
+  const [w, setW] = useState(quieto ? pct : 0);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => setW(pct)));
+    return () => cancelAnimationFrame(id);
+  }, [pct]);
+  return (
+    <div className="rounded-full overflow-hidden" style={{ height: alto, backgroundColor: T.border }}>
+      <div className="h-full rounded-full" style={{ width: `${w}%`, backgroundColor: color, transition: quieto ? "none" : "width 1.1s ease-out" }} />
+    </div>
+  );
+}
+
 export function DeudaCard({ plan, deudas, onCierre }) {
   const [editando, setEditando] = useState(null);
   const pct = plan.total > 0 ? Math.min(100, (plan.pagado / plan.total) * 100) : 0;
+  const cambios = cambioTarjetas(deudas, todayISO());
   const sinSaldo = (deudas?.tarjetas || []).filter((t) => !plan.porTarjeta.some((x) => x.id === t.id));
   return (
     <Card>
       <Eyebrow right={`Fase ${plan.fase}`}>Deuda</Eyebrow>
       {plan.total > 0 ? (
         <>
-          <div className="flex items-baseline justify-between">
-            <span className="text-[13px]" style={{ color: T.textSecondary }}>Queda</span>
-            <span className="gc-code text-[20px] font-semibold">{formatMoney(plan.restante)}</span>
+          <div className="text-[13px]" style={{ color: T.textSecondary }}>Has bajado</div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="gc-code text-[28px] font-semibold leading-tight" style={{ color: T.ok }}>{formatMoney(plan.pagado)}</span>
+            <span className="gc-code text-[18px] font-semibold" style={{ color: T.ok }}>{Math.round(pct)} %</span>
           </div>
-          <div className="h-2 rounded-full mt-1" style={{ backgroundColor: T.border }}>
-            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: "#F0A33B" }} />
+          <div className="mt-1.5"><BarraQueSeLlena pct={pct} color={T.ok} /></div>
+          <div className="flex justify-between text-[13px] mt-1.5" style={{ color: T.textSecondary }}>
+            <span>Queda <b className="gc-code" style={{ color: T.textPrimary }}>{formatMoney(plan.restante)}</b></span>
+            <span>de {formatMoney(plan.total)}</span>
           </div>
-          <div className="text-[12.5px] mt-1" style={{ color: T.textSecondary }}>
-            Bajaste {formatMoney(plan.pagado)} de {formatMoney(plan.total)}
-            {plan.cuota ? ` · cuota esta semana ${formatMoney(plan.cuota.cuota)}` : ""}
-          </div>
+          {plan.cuota && <div className="text-[12.5px] mt-0.5" style={{ color: T.textSecondary }}>Cuota esta semana {formatMoney(plan.cuota.cuota)}</div>}
           <div className="text-[13px] mt-1">{plan.textoPlan}</div>
           <div className="text-[12.5px]" style={{ color: T.textFaint }}>El plan termina el {fechaCorta(plan.fechaPlan)} {plan.fechaPlan.slice(0, 4)}.</div>
           {plan.discover && (
@@ -321,7 +337,14 @@ export function DeudaCard({ plan, deudas, onCierre }) {
                 </span>
               </span>
               <span className="flex items-center gap-2">
-                <span className="gc-code text-[14px]" style={{ color: t.saldo === 0 ? T.ok : T.textPrimary }}>{t.saldo == null ? "—" : t.saldo === 0 ? "✓ $0" : formatMoney(t.saldo)}</span>
+                <span className="text-right">
+                  <span className="gc-code text-[14px] block" style={{ color: t.saldo === 0 ? T.ok : T.textPrimary }}>{t.saldo == null ? "—" : t.saldo === 0 ? "✓ $0" : formatMoney(t.saldo)}</span>
+                  {cambios[t.id] && (
+                    <span className="text-[12px] block whitespace-nowrap" style={{ color: cambios[t.id].diff == null ? T.textFaint : cambios[t.id].diff < 0 ? T.ok : cambios[t.id].diff > 0 ? T.red : T.textSecondary }}>
+                      {cambios[t.id].texto}
+                    </span>
+                  )}
+                </span>
                 {editando !== t.id && (
                   <button type="button" onClick={() => setEditando(t.id)} className="rounded-lg px-2.5 text-[12.5px]" style={{ ...inputSt, minHeight: 36 }}>Saldo</button>
                 )}

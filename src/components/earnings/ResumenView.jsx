@@ -12,6 +12,13 @@ import { esParadaFinal } from "../../lib/jornada.js";
 import { MetaSemanaCard, MetaMesCard, FondoCard, DeudaCard } from "./MetaV2.jsx";
 import { netaMeta, estadoSemana, historialMeta, compensacion, mesMeta, historialMeses } from "../../lib/meta.js";
 
+const SECCIONES = [
+  { id: "meta", label: "Meta" },
+  { id: "dinero", label: "Dinero" },
+  { id: "deuda", label: "Deuda" },
+  { id: "rendimiento", label: "Rinde" },
+];
+
 const TIPOS = [
   { id: "día", label: "Día" },
   { id: "semana", label: "Semana" },
@@ -22,6 +29,7 @@ const TIPOS = [
 // Pestaña Resumen: periodo con ‹ ›, Ganado − Deducciones = Neto, deducciones,
 // comparación con el periodo anterior, últimos periodos y reparto por app.
 export default function ResumenView({ datos, startDow, onSaveJornada, meta = null }) {
+  const [seccion, setSeccion] = useState("meta");
   const [editando, setEditando] = useState(null);
   const [verDetalle, setVerDetalle] = useState(false);
   const [p, setP] = useState(() => periodo("semana", todayISO(), startDow));
@@ -58,6 +66,9 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
 
   return (
     <div className="space-y-3">
+      <Segmented label="Sección" options={SECCIONES} value={seccion} onChange={setSeccion} />
+      {seccion !== "deuda" && (
+        <>
       <Segmented label="Periodo" options={TIPOS} value={p.tipo} onChange={(t) => setP(periodo(t, todayISO(), startDow))} />
       <div className="flex items-center justify-between">
         <button type="button" aria-label="Periodo anterior" onClick={() => setP(moverPeriodo(p, -1, startDow))} className="rounded-xl flex items-center justify-center" style={{ width: 44, height: 44, backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
@@ -68,7 +79,17 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
           <ChevronRight size={18} />
         </button>
       </div>
+        </>
+      )}
 
+      {seccion === "meta" && (
+        <>
+          {!sem && !mes && (
+            <Card>
+              <div className="text-[14px]" style={{ color: T.textSecondary }}>La meta es por semana o por mes.</div>
+              <button type="button" onClick={() => setP(periodo("semana", todayISO(), startDow))} className="w-full mt-2 rounded-xl text-[14px] font-semibold" style={{ backgroundColor: T.red, color: "#fff", minHeight: 44 }}>Ver esta semana</button>
+            </Card>
+          )}
       {sem && (
         <MetaSemanaCard
           estado={sem.estado}
@@ -112,9 +133,11 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
         />
       )}
       {mes && <MetaMesCard mes={mes} hist={histMeses} />}
-      {sem && <FondoCard fondo={mv.fondo} u={mv.u} usos={mv.usos} onUsar={mv.onUsarFondo} />}
-      {sem && <DeudaCard plan={mv.plan} deudas={mv.deudas} onCierre={mv.onCierre} />}
+        </>
+      )}
 
+      {seccion === "dinero" && (
+        <>
       {r.registros === 0 ? (
         <Card>
           <div className="text-[14px] text-center py-4" style={{ color: T.textFaint }}>Sin trabajos apuntados en este {nombre}.</div>
@@ -165,7 +188,18 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
           </div>
         </div>
       </Card>
+        </>
+      )}
 
+      {seccion === "deuda" && mv && (
+        <>
+          <DeudaCard plan={mv.plan} deudas={mv.deudas} onCierre={mv.onCierre} />
+          <FondoCard fondo={mv.fondo} u={mv.u} usos={mv.usos} onUsar={mv.onUsarFondo} />
+        </>
+      )}
+
+      {seccion === "rendimiento" && (
+        <>
       {!esDia && <RendimientoCard datos={datos} hasta={p.hasta < hoy ? p.hasta : hoy} />}
 
       {r.porApp.length > 0 && (
@@ -187,6 +221,8 @@ export default function ResumenView({ datos, startDow, onSaveJornada, meta = nul
             </div>
           ))}
         </Card>
+      )}
+        </>
       )}
     </div>
   );

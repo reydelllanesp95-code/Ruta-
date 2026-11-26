@@ -408,6 +408,31 @@ export function planDeuda(deudas, u, hoy) {
   return { total, pagado, restante, semanal, semanasDiff: diff, textoPlan, fase: faseDeuda(deudas), fechaPlan, cuota: cq, porTarjeta, discover, pendientes: cierresPendientes(deudas, hoy) };
 }
 
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+// Cuánto bajó o subió cada tarjeta: su último saldo (hasta `hoy`) contra el
+// último cierre de un mes anterior. Devuelve { [id]: { diff, mes, texto } };
+// diff null si aún no hay mes anterior.
+export function cambioTarjetas(deudas, hoy) {
+  const out = {};
+  for (const t of deudas?.tarjetas || []) {
+    const cs = (deudas.cierres || []).filter((c) => c.tarjetaId === t.id && c.fecha <= hoy).sort(porFecha);
+    if (!cs.length) continue;
+    const ult = cs[cs.length - 1];
+    const mesUlt = String(ult.fecha).slice(0, 7);
+    const prev = cs.filter((c) => String(c.fecha).slice(0, 7) < mesUlt).at(-1);
+    if (!prev) {
+      out[t.id] = { diff: null, mes: null, texto: "sin mes anterior todavía" };
+      continue;
+    }
+    const diff = round2(pos(ult.saldo) - pos(prev.saldo));
+    const mes = MESES[Number(String(prev.fecha).slice(5, 7)) - 1];
+    const texto = diff === 0 ? `igual que ${mes}` : `${diff < 0 ? "−" : "+"}${m(Math.abs(diff))} vs ${mes}`;
+    out[t.id] = { diff, mes, texto };
+  }
+  return out;
+}
+
 // Hitos de la semana `desde` que aún no se avisaron (uno por semana cada uno).
 export function hitosNuevos(desde, cruzados, avisados = {}) {
   const ya = new Set(avisados[desde] || []);
