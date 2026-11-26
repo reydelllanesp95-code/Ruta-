@@ -14,7 +14,8 @@ function ahora() {
 }
 
 // Odómetro al salir y al llegar a casa: lo único que se apunta en el día.
-export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSave }) {
+// `plain`: sin caja propia, para ir dentro de otra tarjeta.
+export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSave, plain = false }) {
   const abierta = openJornada(jornadas);
   const [editando, setEditando] = useState(false);
   const [horas, setHoras] = useState(false);
@@ -45,7 +46,7 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
   }
 
   return (
-    <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
+    <div className={plain ? "space-y-2" : "rounded-xl p-3 space-y-2"} style={plain ? undefined : { backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
       <div className="flex items-center justify-between text-[12.5px]" style={{ color: T.textSecondary }}>
         <span>
           {abierta
@@ -93,7 +94,7 @@ export default function JornadaCard({ jornadas, lastOdoFor, defaultVehicle, onSa
             </button>
           )
         )}
-        <button type="button" onClick={abrir} className={btn} style={{ backgroundColor: abierta ? T.red : T.surfaceRaised, color: abierta ? "#fff" : T.textPrimary, border: `1px solid ${abierta ? T.red : T.border}` }}>
+        <button type="button" onClick={abrir} className={btn} style={{ backgroundColor: T.red, color: "#fff", border: `1px solid ${T.red}`, minHeight: 52 }}>
           {abierta ? <Home size={17} /> : <LogOut size={17} />} {abierta ? "Llegué a casa" : "Salgo a trabajar"}
         </button>
         </>

@@ -8,7 +8,6 @@ import {
   Plus,
   RefreshCw,
   Images,
-  Clock,
   KeyRound,
 } from "lucide-react";
 import { updateAndReload, BUILD_TIME } from "../lib/appUpdate.js";
@@ -56,10 +55,12 @@ import ResumenView from "./earnings/ResumenView.jsx";
 import DiaView, { nombreDia } from "./earnings/DiaView.jsx";
 import { Card, Eyebrow, Row, Mini, Segmented } from "./earnings/ui.jsx";
 import SemanaPasada from "./earnings/SemanaPasada.jsx";
-import { MetaSemanaCard, DeudaAjustes, CierresPendientes } from "./earnings/MetaV2.jsx";
+import { MetaSemanaCard, DeudaAjustes, SaldoForm } from "./earnings/MetaV2.jsx";
+import { HoyLlevas, FilaCapturas, Pendientes } from "./earnings/HoyCards.jsx";
+import { resumenHoy } from "../lib/hoy.js";
 import { netaMeta, umbralesDe, estadoSemana, fondoColchon, planDeuda, compensacion, hitosNuevos, marcarAvisados, TEXTO_AVISO, MENSAJE_FONDO_LLENO, sanitizeDeudas } from "../lib/meta.js";
 import { periodo, resumenRango, propinasPendientes, filasAño, addDays, gasPorMilla } from "../lib/resumen.js";
-import { withJornadaMiles } from "../lib/jornada.js";
+import { withJornadaMiles, openJornada } from "../lib/jornada.js";
 import {
   makeShift,
   shiftUpdate,
@@ -464,6 +465,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
   );
   const semanaP = periodo("semana", hoy, startDow);
   const pendientes = useMemo(() => propinasPendientes(routesVista, hoy), [routesVista, hoy]);
+  const hoyR = useMemo(() => resumenHoy(datos, hoy), [datos, hoy]);
   const umbrales = useMemo(() => umbralesDe(config), [config]);
   // Meta v2: siempre lunes → domingo.
   const semM = periodo("semana", hoy, 1);
@@ -628,42 +630,45 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
 
         {tab === "hoy" && (
           <>
-            <JornadaCard
-              jornadas={jornadas}
-              lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
-              defaultVehicle={lastVehicle}
-              onSave={persistJornadas}
-            />
-            {pendientes.length > 0 && (
-              <div className="rounded-2xl px-3.5 py-3 flex items-center gap-3" style={{ backgroundColor: T.revisarDim, border: "1px solid #5A4720" }}>
-                <Clock size={20} style={{ color: T.revisar }} />
-                <div className="flex-1">
-                  <div className="text-[14px] font-semibold" style={{ color: "#F7C77A" }}>
-                    {pendientes.length} bloque(s) de Flex sin propina
-                  </div>
-                  <div className="text-[12.5px]" style={{ color: "#E4C489" }}>
-                    {pendientes.slice(0, 2).map((r) => `${fechaCorta(r.fecha)} ${r.horaInicio}`).join(" · ")}
-                  </div>
-                </div>
-                <button onClick={() => setPegando(true)} className="rounded-xl px-3 text-[13px] font-semibold" style={{ backgroundColor: T.revisar, color: "#1A1305", minHeight: 44 }}>
-                  Subir capturas
-                </button>
-              </div>
-            )}
-            {plan.pendientes.length > 0 && <CierresPendientes pendientes={plan.pendientes} onCierre={apuntarCierre} />}
-            {metaPrev.n.ganado > 0 && !metaReg[prevP.desde]?.hecho && (
-              <SemanaPasada
-                semana={metaPrev.n}
-                estado={metaPrev.estado}
-                u={metaPrev.estado.u}
-                compensa={metaPrev.compensa}
-                hecho={false}
-                onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}
-              />
-            )}
-            {/* Con el aviso de propinas, su botón ya abre las capturas: no repetirlo. */}
-            {(pegando || pendientes.length === 0) && capturas}
+            <HoyLlevas r={hoyR} jornada={openJornada(jornadas)} />
             <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} semanaKey={semM.desde} compact onTap={() => onTab("resumen")} tapLabel="Ver la semana en Resumen" />
+            <section className="rounded-2xl p-3 space-y-2" style={{ backgroundColor: T.surface, border: `1px solid ${T.border}` }}>
+              <JornadaCard
+                plain
+                jornadas={jornadas}
+                lastOdoFor={(id) => lastOdometer(id, { routes, fuelups, maints, jornadas })}
+                defaultVehicle={lastVehicle}
+                onSave={persistJornadas}
+              />
+              {pegando ? capturas : <FilaCapturas pendientes={pendientes} onAbrir={() => setPegando(true)} />}
+            </section>
+            <Pendientes
+              items={[
+                ...plan.pendientes.map(({ tarjeta, fechaCierre }) => ({
+                  id: `cierre-${tarjeta.id}-${fechaCierre}`,
+                  tipo: "cierre",
+                  titulo: `Cerró ${tarjeta.nombre} el ${fechaCorta(fechaCierre)}: ¿cuánto quedó?`,
+                  contenido: <SaldoForm tarjeta={tarjeta} fechaCierre={fechaCierre} onCierre={apuntarCierre} />,
+                })),
+                ...(metaPrev.n.ganado > 0 && !metaReg[prevP.desde]?.hecho
+                  ? [{
+                      id: `semana-${prevP.desde}`,
+                      tipo: "semana",
+                      titulo: `Cierre de la semana pasada · ${formatMoney(metaPrev.n.neta)}`,
+                      contenido: (
+                        <SemanaPasada
+                          semana={metaPrev.n}
+                          estado={metaPrev.estado}
+                          u={metaPrev.estado.u}
+                          compensa={metaPrev.compensa}
+                          hecho={false}
+                          onHecho={() => marcarHecho(prevP.desde, metaPrev.estado.reparto)}
+                        />
+                      ),
+                    }]
+                  : []),
+              ]}
+            />
           </>
         )}
 

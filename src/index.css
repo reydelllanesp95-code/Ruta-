@@ -25,3 +25,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .gc-destello { animation: none; }
 }
+
+/* Hoy: punto que late mientras trabajas. */
+@keyframes gc-latido {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.gc-latido {
+  animation: gc-latido 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-latido { animation: none; }
+}

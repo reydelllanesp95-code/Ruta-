@@ -28,7 +28,7 @@ export const UMBRALES_DEFAULT = {
   inversiones: INVERSIONES_DEFAULT,
 };
 
-export const TRAMO_COLOR = { colchon: "#4A9BE8", deuda: "#F0A33B", inversion: "#3DD56D", meta: "#E7C15A" };
+export const TRAMO_COLOR = { colchon: "#4A9BE8", deuda: "#9B87F5", inversion: "#3DD56D", meta: "#C9BCFF" };
 export const TRAMO_LABEL = { colchon: "Colchón", deuda: "Deuda", inversion: "Inversión", meta: "Extra a deuda" };
 export const SEMANAS_POR_MES = 52 / 12;
 

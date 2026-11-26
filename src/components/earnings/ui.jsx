@@ -141,13 +141,40 @@ export function Segmented({ options, value, onChange, label }) {
   );
 }
 
-export const APP_COLOR = { flex: "#4A9BE8", lyft: "#C86DD7", spark: "#F0A33B", otro: "#9A9A9C", ontrac: "#7C7C7E" };
+export const APP_COLOR = { flex: "#4A9BE8", lyft: "#C86DD7", spark: "#2EC4B6", ups: "#B08968", otro: "#9A9A9C", ontrac: "#7C7C7E" };
 export const APP_BADGE = {
   flex: { bg: "#12324F", fg: "#8CC4F5" },
   lyft: { bg: "#3A1E40", fg: "#E6A6F0" },
-  spark: { bg: "#3A2E14", fg: "#F7C77A" },
+  spark: { bg: "#0F3330", fg: "#7FE0D6" },
+  ups: { bg: "#33261C", fg: "#D9B89A" },
   limpieza: { bg: "#16301F", fg: "#8EE8AC" },
 };
+
+// Número que sube contando desde su valor anterior (o 0) hasta `valor` en
+// ~0.8 s. Con «Reducir movimiento» sale directo.
+export function useContando(valor, ms = 800) {
+  const [v, setV] = React.useState(() => (reducirMovimiento() ? valor : 0));
+  const desde = React.useRef(v);
+  React.useEffect(() => {
+    if (reducirMovimiento()) { setV(valor); desde.current = valor; return; }
+    const a = desde.current, t0 = performance.now();
+    let id;
+    const paso = (t) => {
+      const k = Math.min(1, (t - t0) / ms);
+      const x = a + (valor - a) * (1 - Math.pow(1 - k, 3));
+      setV(x);
+      desde.current = x;
+      if (k < 1) id = requestAnimationFrame(paso);
+    };
+    id = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(id);
+  }, [valor, ms]);
+  return v;
+}
+
+export function reducirMovimiento() {
+  try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+}
 
 export function AppBadge({ plataforma, label }) {
   const c = APP_BADGE[plataforma] || { bg: T.surfaceRaised, fg: T.textSecondary };

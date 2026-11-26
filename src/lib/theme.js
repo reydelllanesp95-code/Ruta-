@@ -13,6 +13,7 @@ export const T = {
   redDim: "#3A0F0C",
   ok: "#3DD56D",
   okDim: "#16301F",
-  revisar: "#F0A33B",
-  revisarDim: "#3A2E14",
+  // Avisos en coral (Rey no quiere amarillo en la app).
+  revisar: "#FF7A5C",
+  revisarDim: "#3A1C16",
 };
