@@ -145,7 +145,13 @@ export default function PasteCapture({ routes, vehiculo, onApply, onCancel }) {
             <button
               type="button"
               disabled={!plan.cambios.length}
-              onClick={() => onApply(applyCapture(plataforma, routes, plan, { vehiculo }), plan.cambios.length)}
+              onClick={() => {
+                try {
+                  onApply(applyCapture(plataforma, routes, plan, { vehiculo }), plan.cambios.length);
+                } catch (err) {
+                  setError("No pude aplicar la captura: " + (err.message || err));
+                }
+              }}
               className={btn}
               style={{ backgroundColor: T.red, color: "#fff", opacity: plan.cambios.length ? 1 : 0.5 }}
             >

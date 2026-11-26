@@ -2,7 +2,7 @@
 // (Amazon Flex) y propone cambios a los turnos guardados. Lógica pura.
 
 import { round2 } from "./earnings.js";
-import { makeShift, isShift } from "./platforms.js";
+import { makeShift, isShift, hoursBetween } from "./platforms.js";
 
 const MESES = {
   ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7,
@@ -493,7 +493,9 @@ export function applyLyftPlan(routes, plan, { vehiculo } = {}) {
   });
   for (const c of plan.cambios) {
     if (c.tipo !== "nuevo") continue;
-    const s = makeShift({ plataforma: "lyft", fecha: c.fecha, vehiculo, horaInicio: c.horaInicio, horaFin: c.horaFin, pago: c.pago, propina: c.propina, nota: c.nota });
+    // Un solo viaje da inicio = fin: sin horario válido el día se guarda igual.
+    const horario = hoursBetween(c.horaInicio, c.horaFin) != null ? { horaInicio: c.horaInicio, horaFin: c.horaFin } : {};
+    const s = makeShift({ plataforma: "lyft", fecha: c.fecha, vehiculo, ...horario, pago: c.pago, propina: c.propina, nota: c.nota });
     if (c.horas != null) s.horas = c.horas;
     if (c.millasLyft != null) s.millasLyft = c.millasLyft;
     next.push(s);
