@@ -662,7 +662,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
               />
             )}
             {capturas}
-            <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} compact onTap={() => onTab("resumen")} tapLabel="Ver la semana en Resumen" />
+            <MetaSemanaCard estado={estadoHoy} plan={plan} porLlegar={metaSemana.porLlegar} semanaKey={semM.desde} compact onTap={() => onTab("resumen")} tapLabel="Ver la semana en Resumen" />
           </>
         )}
 

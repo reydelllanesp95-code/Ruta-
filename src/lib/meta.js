@@ -29,7 +29,7 @@ export const UMBRALES_DEFAULT = {
 };
 
 export const TRAMO_COLOR = { colchon: "#4A9BE8", deuda: "#F0A33B", inversion: "#3DD56D", meta: "#E7C15A" };
-export const TRAMO_LABEL = { colchon: "Colchón", deuda: "Deuda", inversion: "Inversión", meta: "Meta" };
+export const TRAMO_LABEL = { colchon: "Colchón", deuda: "Deuda", inversion: "Inversión", meta: "Extra a deuda" };
 export const SEMANAS_POR_MES = 52 / 12;
 
 const enRango = (f, desde, hasta) => String(f) >= desde && String(f) <= hasta;
@@ -243,6 +243,45 @@ export function estadoSemana(neta, uBase, { saldoFondo = 0, deudas = null, desde
     cruzados,
     invertir: n >= h.inversion,
     hitos: hs,
+  };
+}
+
+// Para qué es cada parte de la meta, en llano.
+const PARA = { colchon: "para el colchón", deuda: "para la deuda de la semana", inversion: "para invertir", meta: "para el extra a la deuda" };
+function queEs(id, u) {
+  if (id === "colchon") return `Tu fondo de emergencia (hasta ${m(u.fondoTope)}): para una semana mala o un imprevisto.`;
+  if (id === "deuda") return "La cuota de las tarjetas de esta semana.";
+  if (id === "inversion") return `Para ${(u.inversiones || []).filter((x) => x.monto > 0).map((x) => x.nombre).join(", ") || "tus inversiones"}.`;
+  return "Un pago de más a las tarjetas. Con esto cumples la meta.";
+}
+
+// Partes de la meta en su orden, con el monto de cada una (no el acumulado),
+// lo que llevas en ella y su estado: "hecha", "en curso" o "pendiente".
+export function partesSemana(estado) {
+  const n = estado.neta;
+  return estado.hitos.tramos.map((t) => {
+    const monto = round2(t.hasta - t.desde);
+    const llevas = round2(Math.min(monto, Math.max(0, n - t.desde)));
+    const est = n >= t.hasta ? "hecha" : n > t.desde ? "en curso" : "pendiente";
+    return { id: t.id, label: t.label, color: t.color, desde: t.desde, hasta: t.hasta, monto, llevas, estado: est, que: queEs(t.id, estado.u) };
+  });
+}
+
+// Lo próximo por completar, para ponerlo arriba en grande.
+export function proximaMeta(estado) {
+  const p = partesSemana(estado).find((x) => x.estado !== "hecha");
+  if (p) {
+    const falta = round2(p.hasta - estado.neta);
+    return { id: p.id, falta, color: p.color, titulo: `Faltan ${m(falta)} ${PARA[p.id]}`, que: p.que };
+  }
+  const exc = estado.reparto.excedente;
+  return {
+    id: "cumplida",
+    falta: 0,
+    color: TRAMO_COLOR.meta,
+    excedente: exc,
+    titulo: "¡Meta de la semana cumplida!",
+    que: exc > 0 ? `Llevas ${m(exc)} de más esta semana.` : "Lo que hagas desde aquí es de más.",
   };
 }
 
