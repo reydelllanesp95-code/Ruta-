@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, fechaCorta, round2, todayISO, makeUUID } from "../../lib/earnings.js";
-import { MENSAJE_FONDO_LLENO } from "../../lib/meta.js";
+import { MENSAJE_FONDO_LLENO, partesSemana, proximaMeta } from "../../lib/meta.js";
 import { Card, Eyebrow, Row, MetaBar } from "./ui.jsx";
 
 // Tarjetas de la meta v2 (semana, mes, fondo colchón, deuda). Solo pintan:
@@ -24,23 +24,111 @@ export function Inversiones({ lista }) {
   );
 }
 
-export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, hist = null, desdeSel, onTap = null, tapLabel = "", onSemana = null, children }) {
-  const { hitos } = estado;
+// Lo último que viste de la barra esa semana, para que al abrir se llene
+// desde ahí. Si el teléfono no deja guardarlo, se anima desde $0.
+const VISTO = "ruta_meta_visto_";
+function leerVisto(k) {
+  try { const v = Number(localStorage.getItem(VISTO + k)); return Number.isFinite(v) ? v : 0; } catch { return 0; }
+}
+function guardarVisto(k, v) {
+  try { localStorage.setItem(VISTO + k, String(v)); } catch {}
+}
+function sinMovimiento() {
+  try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
+}
+
+// La neta que se pinta: arranca en lo último visto y, tras pintarse, pasa a la
+// de ahora (la transición CSS hace el llenado).
+function useLlenado(semanaKey, neta) {
+  const quieto = sinMovimiento();
+  const [antes] = useState(() => (quieto ? neta : Math.min(leerVisto(semanaKey), neta)));
+  const [mostrado, setMostrado] = useState(antes);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => setMostrado(neta)));
+    guardarVisto(semanaKey, neta);
+    return () => cancelAnimationFrame(id);
+  }, [semanaKey, neta]);
+  return { antes, mostrado, quieto };
+}
+
+function BarraViva({ estado, semanaKey, compact }) {
+  const { tramos, meta } = estado.hitos;
+  const { antes, mostrado, quieto } = useLlenado(semanaKey, estado.neta);
+  const pct = (v) => Math.max(0, Math.min(100, (v / (meta || 1)) * 100));
+  return (
+    <div className="relative rounded-full overflow-hidden" style={{ height: compact ? 14 : 20, backgroundColor: T.border }} role="img" aria-label={`Meta de la semana: ${formatMoney(estado.neta)} de ${formatMoney(meta)}`}>
+      {tramos.map((t) => (
+        <div key={t.id + "f"} className="absolute top-0 h-full" style={{ left: `${pct(t.desde)}%`, width: `${pct(t.hasta) - pct(t.desde)}%`, backgroundColor: t.color, opacity: 0.18 }} />
+      ))}
+      <div
+        className="absolute inset-0"
+        style={{ clipPath: `inset(0 ${100 - pct(mostrado)}% 0 0)`, WebkitClipPath: `inset(0 ${100 - pct(mostrado)}% 0 0)`, transition: quieto ? "none" : "clip-path 1.1s ease-out, -webkit-clip-path 1.1s ease-out" }}
+      >
+        {tramos.map((t) => {
+          // Se completó desde la última vez: destella al terminar de llenarse.
+          const recien = !quieto && antes < t.hasta && estado.neta >= t.hasta;
+          return <div key={t.id} className={"absolute top-0 h-full" + (recien ? " gc-destello" : "")} style={{ left: `${pct(t.desde)}%`, width: `${pct(t.hasta) - pct(t.desde)}%`, backgroundColor: t.color }} />;
+        })}
+      </div>
+      {tramos.slice(0, -1).map((t) => (
+        <div key={t.id + "m"} className="absolute top-0 h-full" style={{ left: `${pct(t.hasta)}%`, width: 2, backgroundColor: T.bg || "#000" }} aria-hidden="true" />
+      ))}
+    </div>
+  );
+}
+
+const ESTADO_PARTE = { hecha: "✓", "en curso": "", pendiente: "" };
+
+function MetaSemanaViva({ estado, plan, porLlegar, compact, semanaKey }) {
+  const prox = proximaMeta(estado);
+  const partes = partesSemana(estado);
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Meta de la semana</span>
+        <span className="gc-code text-[13px]" style={{ color: T.textSecondary }}>
+          {formatMoney(estado.neta)} <span style={{ color: T.textFaint }}>/ {formatMoney(estado.hitos.meta)}</span>
+        </span>
+      </div>
+      <div className={`${compact ? "text-[19px]" : "text-[22px]"} font-semibold leading-tight mt-1`} style={{ color: prox.color }}>{prox.titulo}</div>
+      <div className="text-[13px] mt-0.5 mb-2" style={{ color: T.textSecondary }}>{prox.que}</div>
+      <BarraViva estado={estado} semanaKey={semanaKey} compact={compact} />
+      {!compact && (
+        <div className="mt-2.5 space-y-1.5">
+          {partes.map((p) => (
+            <div key={p.id} className="flex gap-2.5 items-start" style={{ opacity: p.estado === "pendiente" ? 0.7 : 1 }}>
+              <span className="inline-block rounded-full mt-1.5 shrink-0" style={{ width: 9, height: 9, backgroundColor: p.color }} />
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between gap-2 text-[14px]">
+                  <span style={{ color: T.textPrimary }}>{p.label} {ESTADO_PARTE[p.estado] && <span style={{ color: T.ok }}>{ESTADO_PARTE[p.estado]}</span>}</span>
+                  <span className="gc-code" style={{ color: p.estado === "hecha" ? T.ok : T.textSecondary }}>
+                    {p.estado === "en curso" ? `${formatMoney(p.llevas)} de ${formatMoney(p.monto)}` : formatMoney(p.monto)}
+                  </span>
+                </div>
+                <div className="text-[12px] leading-snug" style={{ color: T.textFaint }}>{p.que}</div>
+              </div>
+            </div>
+          ))}
+          <div className="text-[12px] pt-0.5" style={{ color: T.textFaint }}>Se llenan en este orden. Lo que pase de {formatMoney(estado.hitos.meta)} es de más.</div>
+        </div>
+      )}
+      {[estado.textoCuota, estado.consejo, plan && plan.textoPlan].filter(Boolean).map((l, i) => (
+        <div key={i} className="text-[12.5px] mt-1" style={{ color: T.textSecondary }}>{l}</div>
+      ))}
+      {porLlegar > 0 && (
+        <div className="text-[12px] mt-0.5" style={{ color: T.revisar }}>
+          {porLlegar} propina(s) de Flex por llegar (no cuentan hasta que las subas).
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, hist = null, desdeSel, semanaKey, onTap = null, tapLabel = "", onSemana = null, children }) {
   return (
     <Card>
       {(() => {
-        const barra = (
-      <MetaBar
-        neta={estado.neta}
-        tramos={hitos.tramos}
-        meta={hitos.meta}
-        color={estado.color}
-        texto={estado.texto}
-        lineas={[estado.textoCuota, estado.consejo, plan && plan.textoPlan]}
-        porLlegar={porLlegar}
-        compact={compact}
-      />
-        );
+        const barra = <MetaSemanaViva estado={estado} plan={plan} porLlegar={porLlegar} compact={compact} semanaKey={semanaKey || desdeSel || "semana"} />;
         return onTap ? (
           <button type="button" onClick={onTap} className="w-full text-left" aria-label={tapLabel || "Ver detalle de la semana"}>
             {barra}
