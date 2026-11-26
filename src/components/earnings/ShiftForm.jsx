@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Save, X, Trash2 } from "lucide-react";
 import { T } from "../../lib/theme.js";
 import { todayISO } from "../../lib/earnings.js";
-import { SHIFT_PLATFORMS, platformLabel, validateShift, hoursBetween } from "../../lib/platforms.js";
+import { SHIFT_PLATFORMS, platformLabel, validateShift, hoursBetween, upsPay } from "../../lib/platforms.js";
+import { formatMoney } from "../../lib/earnings.js";
 import VehiclePicker from "./VehiclePicker.jsx";
 import OdometerWheel from "./OdometerWheel.jsx";
 import { nextStage, summarizeBlocks } from "../../lib/guidedShift.js";
@@ -31,6 +32,7 @@ export default function ShiftForm({
   persistDraft = false,
   lastOdoByVehicle = {},
   locales = [],
+  upsTarifas = null,
   onSubmit,
   onCancel,
   onDelete,
@@ -67,6 +69,12 @@ export default function ShiftForm({
   const [editado, setEditado] = useState(() => Boolean(initial || i.editado || (i.editado == null && draftHasData(i))));
   const [correctInitialOdo, setCorrectInitialOdo] = useState(false);
   const multi = bloques.length > 0;
+  const esLimpieza = plataforma === "limpieza";
+  const esUps = plataforma === "ups";
+  // Limpieza y UPS: horas a mano con «Ahora», sin bloques ni pago a mano.
+  const simple = esLimpieza || esUps;
+  // Al editar, UPS usa las tarifas con que se guardó (quedan congeladas).
+  const tarifas = initial?.ups ? { hora: initial.ups.hora, milla: initial.ups.milla, retencionPct: initial.ups.retencionPct } : upsTarifas;
   const currentBlock = () => ({ horaInicio, horaFin, pago, propina });
   const allBlocks = () => [...bloques, currentBlock()];
   const stage = nextStage({ salidaCasa, horaInicio, horaFin, llegadaCasa });
@@ -120,7 +128,7 @@ export default function ShiftForm({
           className="gc-code flex-1 min-w-0 rounded-lg px-2 py-2 text-[14px] outline-none"
           style={inputStyle}
         />
-        {esLimpieza && <button type="button" onClick={() => { set(nowHHMM()); setEditado(true); }} className="rounded-lg px-2 text-[12px]" style={inputStyle}>Ahora</button>}
+        {simple && <button type="button" onClick={() => { set(nowHHMM()); setEditado(true); }} className="rounded-lg px-2 text-[12px]" style={inputStyle}>Ahora</button>}
       </div>
     </Field>
   );
@@ -135,7 +143,9 @@ export default function ShiftForm({
       ? Math.round((of - oi) * 10) / 10
       : null;
 
-  const esLimpieza = plataforma === "limpieza";
+  const upsPreview = esUps && tarifas && hoursBetween(horaInicio, horaFin) != null
+    ? upsPay(hoursBetween(horaInicio, horaFin), odoMillas ?? (Number(millas) || 0), tarifas)
+    : null;
 
   function submit() {
     const input = {
@@ -153,7 +163,8 @@ export default function ShiftForm({
       odoInicio,
       odoFin,
       local,
-      ...(multi || initial?.bloques || (!initial && !esLimpieza && (horaInicio || horaFin)) ? { bloques: allBlocks() } : {}),
+      ...(esUps ? { upsTarifas: tarifas } : {}),
+      ...(multi || initial?.bloques || (!initial && !simple && (horaInicio || horaFin)) ? { bloques: allBlocks() } : {}),
     };
     // Limpieza: sin bloque ni pago (aunque se hubieran escrito antes de cambiar).
     if (esLimpieza) Object.assign(input, { horaInicio: "", horaFin: "", pago: "", propina: "" });
@@ -175,7 +186,7 @@ export default function ShiftForm({
 
   return (
     <div className="space-y-2.5" onChangeCapture={() => setEditado(true)}>
-      <div className="grid grid-cols-5 gap-1">
+      <div className="grid grid-cols-3 gap-1">
         {SHIFT_PLATFORMS.map((p) => {
           const active = p === plataforma;
           return (
@@ -235,7 +246,7 @@ export default function ShiftForm({
         </Field>
       )}
 
-      {!initial && !esLimpieza && (
+      {!initial && !simple && (
         salidaCasa && !correctInitialOdo ? (
           <div className="rounded-lg p-3" style={{ backgroundColor: T.surfaceRaised, border: `1px solid ${T.border}` }}>
             <div className="flex items-center justify-between gap-2">
@@ -251,13 +262,13 @@ export default function ShiftForm({
           </div>
         )
       )}
-      {!initial && !esLimpieza && stage && stage.field !== "llegadaCasa" && (
+      {!initial && !simple && stage && stage.field !== "llegadaCasa" && (
         <div>
           <button type="button" onClick={advance} className="w-full rounded-xl py-4 text-[20px] font-semibold" style={{ backgroundColor: T.red, color: "#fff" }}>{stage.label}</button>
           <p className="text-center text-[11px] mt-1" style={{ color: T.textFaint }}>Guarda la hora actual</p>
         </div>
       )}
-      {!initial && !esLimpieza && horaFin && !llegadaCasa && <button type="button" onClick={addBlock} className="w-full rounded-lg py-3 text-[14px]" style={inputStyle}>Añadir otro bloque</button>}
+      {!initial && !simple && horaFin && !llegadaCasa && <button type="button" onClick={addBlock} className="w-full rounded-lg py-3 text-[14px]" style={inputStyle}>Añadir otro bloque</button>}
       {multi && <div className="space-y-2">
         {bloques.map((b, index) => <div key={index} className="rounded-lg p-2" style={{ border: `1px solid ${T.border}` }}>
           <div className="text-[12px] mb-1" style={{ color: T.textSecondary }}>Bloque {index + 1}</div>
@@ -267,17 +278,17 @@ export default function ShiftForm({
         </div>)}
         <div className="flex justify-between gap-2 text-[12px]" style={{ color: T.textSecondary }}><span>Bloque {bloques.length + 1} · actual</span>{!initial && !llegadaCasa && <button type="button" onClick={cancelNewBlock}>Volver al bloque anterior</button>}</div>
       </div>}
-      {!initial && !esLimpieza && <div className="rounded-lg p-3 space-y-1.5" style={{ backgroundColor: T.surfaceRaised }}>
+      {!initial && !simple && <div className="rounded-lg p-3 space-y-1.5" style={{ backgroundColor: T.surfaceRaised }}>
         <div className="text-[12px]" style={{ color: T.textSecondary }}>Horas registradas · toca una hora para corregirla</div>
         {[["Salí de casa", salidaCasa, setSalidaCasa], ["Inicio del bloque", horaInicio, setHoraInicio], ["Fin del bloque", horaFin, setHoraFin], ["Llegué a casa", llegadaCasa, setLlegadaCasa]].map(([label, value, set]) => <label key={label} className="flex items-center justify-between gap-2 text-[13px]" style={{ color: value ? T.textPrimary : T.textFaint }}>
           <span>{label}</span>
           <input type="time" aria-label={label} value={value} onChange={(e) => set(e.target.value)} className="gc-code rounded-lg px-2 py-1.5 text-[14px] outline-none w-[7.5rem]" style={{ ...inputStyle, opacity: value ? 1 : 0.6 }} />
         </label>)}
       </div>}
-      {(initial || esLimpieza) && <div className="grid grid-cols-2 gap-2">
+      {(initial || simple) && <div className="grid grid-cols-2 gap-2">
         {timeField("Salí de casa", salidaCasa, setSalidaCasa)}
-        {!esLimpieza && timeField("Inicio bloque", horaInicio, setHoraInicio)}
-        {!esLimpieza && timeField("Fin bloque", horaFin, setHoraFin)}
+        {!esLimpieza && timeField(esUps ? "Entrada UPS" : "Inicio bloque", horaInicio, setHoraInicio)}
+        {!esLimpieza && timeField(esUps ? "Salida UPS" : "Fin bloque", horaFin, setHoraFin)}
         {timeField("Llegué a casa", llegadaCasa, setLlegadaCasa)}
       </div>}
       <div className="text-[11.5px] -mt-1" style={{ color: T.textFaint }}>
@@ -288,16 +299,25 @@ export default function ShiftForm({
             : "Sin horas no se puede calcular tu $/hora"}
       </div>
 
-      {!esLimpieza && (
+      {upsPreview && (
+        <div className="rounded-lg p-3 text-[13px] space-y-0.5" style={{ backgroundColor: T.surfaceRaised, color: T.textSecondary }}>
+          <div className="flex justify-between"><span>Horas ({hoursBetween(horaInicio, horaFin)} h × {formatMoney(tarifas.hora)})</span><span className="gc-code">{formatMoney(upsPreview.brutoHoras)}</span></div>
+          <div className="flex justify-between"><span>Impuestos estimados ({tarifas.retencionPct} %)</span><span className="gc-code">−{formatMoney(upsPreview.retenido)}</span></div>
+          <div className="flex justify-between"><span>Millas × {formatMoney(tarifas.milla)} (sin impuestos)</span><span className="gc-code">+{formatMoney(upsPreview.reembolso)}</span></div>
+          <div className="flex justify-between font-semibold pt-1" style={{ color: T.textPrimary }}><span>Te queda</span><span className="gc-code">{formatMoney(upsPreview.neto)}</span></div>
+        </div>
+      )}
+
+      {!simple && (
         <div className="grid grid-cols-2 gap-2">
           <Field label="Pago $">{input(pago, setPago, { inputMode: "decimal", placeholder: "0" })}</Field>
           <Field label="Propina $">{input(propina, setPropina, { inputMode: "decimal", placeholder: "0" })}</Field>
         </div>
       )}
 
-      {(initial || esLimpieza) && <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={(v) => { setOdoInicio(v); setEditado(true); }} />}
+      {(initial || simple) && <OdometerWheel label="Odómetro al salir" value={odoInicio} onChange={(v) => { setOdoInicio(v); setEditado(true); }} />}
       <OdometerWheel label="Odómetro al llegar" value={odoFin} onChange={(v) => { setOdoFin(v); setEditado(true); }} base={odoInicio} />
-      {!initial && !esLimpieza && stage?.field === "llegadaCasa" && (
+      {!initial && !simple && stage?.field === "llegadaCasa" && (
         <div>
           <button type="button" onClick={advance} className="w-full rounded-xl py-4 text-[20px] font-semibold" style={{ backgroundColor: T.red, color: "#fff" }}>{stage.label}</button>
           <p className="text-center text-[11px] mt-1" style={{ color: T.textFaint }}>Guarda la hora actual</p>
@@ -308,7 +328,7 @@ export default function ShiftForm({
           {odoMillas} millas (del odómetro)
         </div>
       ) : (
-        <Field label="Millas (si no usas odómetro)">
+        <Field label={esUps ? "Millas que te paga UPS" : "Millas (si no usas odómetro)"}>
           {input(millas, setMillas, { inputMode: "decimal", placeholder: "0" })}
         </Field>
       )}

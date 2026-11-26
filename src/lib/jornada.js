@@ -38,6 +38,11 @@ function recibe(r) {
   return isShift(r) && !isCleaning(r) && (r.odoInicio == null || r.odoInicio === "") && (r.odoFin == null || r.odoFin === "");
 }
 
+// Millas que el trabajo ya trae: las de la captura de Lyft o las que paga UPS.
+function propias(r) {
+  return r.plataforma === "ups" ? Number(r.ups && r.ups.millasPagadas) || 0 : Number(r.millasLyft) || 0;
+}
+
 // Devuelve las rutas con `millas` (y el carro, si ese día se usó uno solo)
 // sacados de las jornadas cerradas. No modifica `routes`.
 export function withJornadaMiles(routes, jornadas) {
@@ -58,13 +63,13 @@ export function withJornadaMiles(routes, jornadas) {
     // Lyft con millas de su captura: se las queda (sin pasar del odómetro);
     // el resto del día se reparte entre los demás por horas.
     let quedan = d.millas;
-    const conPropias = todos.filter((r) => Number(r.millasLyft) > 0);
+    const conPropias = todos.filter((r) => propias(r) > 0);
     for (const r of conPropias) {
-      const m = round2(Math.min(Number(r.millasLyft), quedan));
+      const m = round2(Math.min(propias(r), quedan));
       quedan = round2(quedan - m);
       reparto.set(r.id, { millas: m, vehiculo });
     }
-    const del = todos.filter((r) => !(Number(r.millasLyft) > 0));
+    const del = todos.filter((r) => !(propias(r) > 0));
     if (!del.length) {
       // Día solo de Lyft: el resto del odómetro (entre viajes, volver) también es suyo.
       const ult = conPropias[conPropias.length - 1];

@@ -34,7 +34,7 @@ import {
   formatMoney,
   round2,
 } from "../lib/earnings.js";
-import { loadConfig, saveConfig } from "../lib/config.js";
+import { loadConfig, saveConfig, upsTarifasDe } from "../lib/config.js";
 import { makeFuelup } from "../lib/fuel.js";
 import { vehicleConfigs, vehicleOf, vehicleLabel, VEHICLE_IDS, VEHICLES } from "../lib/vehicles.js";
 import { makeMaint } from "../lib/maintenance.js";
@@ -699,6 +699,7 @@ export default function Earnings({ tab = "hoy", onTab = () => {} }) {
                     VEHICLE_IDS.map((id) => [id, lastOdometer(id, { routes, fuelups, maints, jornadas })])
                   )}
                   defaultVehicle={lastVehicle}
+                  upsTarifas={upsTarifasDe(config)}
                   onSubmit={addShift}
                   onCancel={() => {
                     setHayBorrador(draftHasData(loadDraft()));

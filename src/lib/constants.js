@@ -85,6 +85,10 @@ export const DEFAULT_CONFIG = {
   fondo_desde: "2026-11-23",
   plan_inicio: "2026-11-23",
   plan_meses: 5,
+  // UPS (empezó 25-nov-2026): $/hora, $/milla y % de impuestos retenidos.
+  ups_tarifa_hora: 23,
+  ups_tarifa_milla: 0.7,
+  ups_retencion_pct: 18,
 };
 
 // Claves de la meta v1 que la v2 sustituye (meta_deuda era $350 y ahora la

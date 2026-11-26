@@ -63,7 +63,24 @@ export function sanitizeConfig(raw) {
     fondo_desde: fecha(c.fondo_desde, DEFAULT_CONFIG.fondo_desde),
     plan_inicio: fecha(c.plan_inicio, DEFAULT_CONFIG.plan_inicio),
     plan_meses: positive(c.plan_meses, DEFAULT_CONFIG.plan_meses),
+    ups_tarifa_hora: nonNeg(c.ups_tarifa_hora, DEFAULT_CONFIG.ups_tarifa_hora),
+    ups_tarifa_milla: nonNeg(c.ups_tarifa_milla, DEFAULT_CONFIG.ups_tarifa_milla),
+    ups_retencion_pct: Number(c.ups_retencion_pct) <= 100 ? nonNeg(c.ups_retencion_pct, DEFAULT_CONFIG.ups_retencion_pct) : DEFAULT_CONFIG.ups_retencion_pct,
   };
+}
+
+// Tarifas de UPS para un turno nuevo, sacadas de la configuración.
+export function upsTarifasDe(config) {
+  const c = sanitizeConfig(config);
+  return { hora: c.ups_tarifa_hora, milla: c.ups_tarifa_milla, retencionPct: c.ups_retencion_pct };
+}
+
+// % retenido según el cheque: impuestos ÷ bruto de horas × 100, a 1 decimal.
+export function retencionDeCheque(brutoHoras, impuestos) {
+  const b = Number(brutoHoras);
+  const t = Number(impuestos);
+  if (!(b > 0) || !(t >= 0) || t > b) return null;
+  return Math.round((t / b) * 1000) / 10;
 }
 
 export async function loadConfig() {
