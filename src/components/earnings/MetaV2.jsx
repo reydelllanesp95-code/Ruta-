@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { T } from "../../lib/theme.js";
 import { formatMoney, fechaCorta, round2, todayISO, makeUUID } from "../../lib/earnings.js";
 import { MENSAJE_FONDO_LLENO, partesSemana, proximaMeta, cambioTarjetas } from "../../lib/meta.js";
-import { Card, Eyebrow, Row, MetaBar } from "./ui.jsx";
+import { Card, Eyebrow, Row, MetaBar, useContando } from "./ui.jsx";
 
 // Tarjetas de la meta v2 (semana, mes, fondo colchón, deuda). Solo pintan:
 // los cálculos vienen de lib/meta.js. RUTA no mueve dinero.
@@ -82,12 +82,13 @@ const ESTADO_PARTE = { hecha: "✓", "en curso": "", pendiente: "" };
 function MetaSemanaViva({ estado, plan, porLlegar, compact, semanaKey }) {
   const prox = proximaMeta(estado);
   const partes = partesSemana(estado);
+  const neta = useContando(estado.neta);
   return (
     <div>
       <div className="flex items-baseline justify-between">
         <span className="gc-eyebrow text-[11px] uppercase" style={{ color: T.textFaint }}>Meta de la semana</span>
         <span className="gc-code text-[13px]" style={{ color: T.textSecondary }}>
-          {formatMoney(estado.neta)} <span style={{ color: T.textFaint }}>/ {formatMoney(estado.hitos.meta)}</span>
+          {formatMoney(neta)} <span style={{ color: T.textFaint }}>/ {formatMoney(estado.hitos.meta)}</span>
         </span>
       </div>
       <div className={`${compact ? "text-[19px]" : "text-[22px]"} font-semibold leading-tight mt-1`} style={{ color: prox.color }}>{prox.titulo}</div>
@@ -158,7 +159,7 @@ export function MetaSemanaCard({ estado, plan, porLlegar = 0, compact = false, h
 }
 
 export function MetaMesCard({ mes, hist }) {
-  const color = mes.adelante ? T.ok : "#F0A33B";
+  const color = mes.adelante ? T.ok : T.revisar;
   return (
     <Card>
       <MetaBar titulo={`Meta del mes · ${mes.label}`} neta={mes.neta} tramos={mes.hitos.tramos} meta={mes.meta} color={color} texto={mes.texto} lineas={[`Ritmo a hoy: ${formatMoney(mes.esperado)}.`]} />
@@ -240,7 +241,7 @@ export function FondoCard({ fondo, u, usos = [], onUsar }) {
 }
 
 // Saldo de cierre de una tarjeta: un campo y Guardar.
-function SaldoForm({ tarjeta, fechaCierre, onCierre, onClose }) {
+export function SaldoForm({ tarjeta, fechaCierre, onCierre, onClose }) {
   const [saldo, setSaldo] = useState("");
   const [error, setError] = useState("");
   function guardar() {
